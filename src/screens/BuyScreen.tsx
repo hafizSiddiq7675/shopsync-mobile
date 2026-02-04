@@ -12,7 +12,7 @@ import {CompositeNavigationProp} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import {RootStackParamList, TabParamList} from '@types';
-import {SPACING} from '@constants/theme';
+import {COLORS, SPACING} from '@constants/theme';
 import {useAppSelector} from '@store';
 
 type BuyScreenNavigationProp = CompositeNavigationProp<
@@ -24,21 +24,14 @@ type BuyScreenProps = {
   navigation: BuyScreenNavigationProp;
 };
 
-const DARK_BG = '#0D0D1A';
-const CARD_BG = '#1A1A2E';
-const PURPLE = '#6C63FF';
-const PINK = '#FF6B9D';
-const GREEN = '#4CAF50';
-const ORANGE = '#FF9800';
-
 const BuyScreen: React.FC<BuyScreenProps> = ({navigation}) => {
   const cartItems = useAppSelector(state => state.cart.items);
   const cartTotal = useAppSelector(state => state.cart.total);
 
   const quickActions = [
-    {icon: 'barcode-scan', label: 'Scan', color: GREEN},
-    {icon: 'magnify', label: 'Search', color: PINK},
-    {icon: 'history', label: 'Recent', color: ORANGE},
+    {icon: 'barcode-scan', label: 'Scan', color: COLORS.green},
+    {icon: 'magnify', label: 'Search', color: COLORS.pink},
+    {icon: 'history', label: 'Recent', color: COLORS.orange},
   ];
 
   const recentPurchases = [
@@ -136,7 +129,7 @@ const BuyScreen: React.FC<BuyScreenProps> = ({navigation}) => {
           {recentPurchases.map((item, index) => (
             <TouchableOpacity key={index} style={styles.recentItem}>
               <View style={styles.recentIcon}>
-                <Icon source="package-variant" size={24} color={GREEN} />
+                <Icon source="package-variant" size={24} color={COLORS.green} />
               </View>
               <View style={styles.recentInfo}>
                 <Text style={styles.recentName}>{item.name}</Text>
@@ -173,7 +166,7 @@ const BuyScreen: React.FC<BuyScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: DARK_BG,
+    backgroundColor: COLORS.darkBg,
   },
   header: {
     flexDirection: 'row',
@@ -186,7 +179,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -199,7 +192,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -207,7 +200,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: PINK,
+    backgroundColor: COLORS.pink,
     borderRadius: 10,
     width: 20,
     height: 20,
@@ -260,7 +253,7 @@ const styles = StyleSheet.create({
   scanButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: GREEN,
+    backgroundColor: COLORS.green,
     borderRadius: 16,
     padding: SPACING.md,
   },
@@ -289,7 +282,7 @@ const styles = StyleSheet.create({
   searchButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     borderRadius: 16,
     padding: SPACING.md,
     borderWidth: 1,
@@ -299,7 +292,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 14,
-    backgroundColor: PINK + '20',
+    backgroundColor: COLORS.pink + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -320,7 +313,7 @@ const styles = StyleSheet.create({
   vendorButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     borderRadius: 16,
     padding: SPACING.md,
     borderWidth: 1,
@@ -330,7 +323,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 14,
-    backgroundColor: PURPLE + '20',
+    backgroundColor: COLORS.purple + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -349,7 +342,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   recentList: {
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -364,7 +357,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: GREEN + '20',
+    backgroundColor: COLORS.green + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -385,14 +378,14 @@ const styles = StyleSheet.create({
   recentPrice: {
     fontSize: 15,
     fontWeight: '600',
-    color: GREEN,
+    color: COLORS.green,
     marginRight: SPACING.md,
   },
   addButton: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: GREEN,
+    backgroundColor: COLORS.green,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -400,7 +393,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: GREEN,
+    backgroundColor: COLORS.green,
     borderRadius: 16,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,

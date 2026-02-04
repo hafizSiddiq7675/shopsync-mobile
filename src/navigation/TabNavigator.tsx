@@ -1,8 +1,11 @@
 import React from 'react';
 import {StyleSheet, View, Text} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
-import {HomeScreen, SaleScreen, BuyScreen} from '@screens';
+import {HomeScreen, SaleScreen, BuyScreen, CheckoutScreen} from '@screens';
+import {COLORS} from '@constants/theme';
+import {SaleStackParamList} from '@types';
 
 export type TabParamList = {
   HomeTab: undefined;
@@ -12,15 +15,22 @@ export type TabParamList = {
 };
 
 const Tab = createBottomTabNavigator<TabParamList>();
+const SaleStack = createNativeStackNavigator<SaleStackParamList>();
 
-const TAB_BAR_BG = '#1A1A2E';
-const ACTIVE_BG = '#6C63FF';
-const INACTIVE_COLOR = '#6B7280';
+// Nested Sale Stack Navigator (keeps bottom tabs visible)
+const SaleStackNavigator: React.FC = () => {
+  return (
+    <SaleStack.Navigator screenOptions={{headerShown: false}}>
+      <SaleStack.Screen name="Sale" component={SaleScreen} />
+      <SaleStack.Screen name="Checkout" component={CheckoutScreen} />
+    </SaleStack.Navigator>
+  );
+};
 
 // Styles defined first to avoid TypeScript reference errors
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: TAB_BAR_BG,
+    backgroundColor: COLORS.tabBarBg,
     borderTopWidth: 0,
     height: 60,
     paddingBottom: 8,
@@ -56,7 +66,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: '#0D0D1A',
+    backgroundColor: COLORS.darkBg,
   },
   iconContainer: {
     width: 36,
@@ -69,7 +79,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: ACTIVE_BG,
+    backgroundColor: COLORS.purple,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -109,7 +119,7 @@ const TabIconButton = ({
     ) : (
       <View style={styles.inactiveWrapper}>
         <View style={styles.iconContainer}>
-          <Icon source={iconNameOutline} size={20} color={INACTIVE_COLOR} />
+          <Icon source={iconNameOutline} size={20} color={COLORS.tabInactive} />
         </View>
       </View>
     )}
@@ -127,7 +137,7 @@ const TabNavigator: React.FC = () => {
       }}>
       <Tab.Screen
         name="SaleTab"
-        component={SaleScreen}
+        component={SaleStackNavigator}
         options={{
           tabBarIcon: ({focused}) => (
             <TabIconButton

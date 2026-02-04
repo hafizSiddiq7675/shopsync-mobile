@@ -114,13 +114,13 @@ android {
         }
     }
 
-    // Split APKs by ABI to reduce size (~15MB per architecture instead of ~57MB)
+    // Split APKs by ABI for release builds only (debug needs x86 for emulator)
     splits {
         abi {
             reset()
-            enable true
+            enable gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
             universalApk false  // Don't generate universal APK
-            include "armeabi-v7a", "arm64-v8a"  // Most common architectures
+            include "armeabi-v7a", "arm64-v8a"  // Most common architectures for real devices
         }
     }
 }

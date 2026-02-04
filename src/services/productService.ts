@@ -1,0 +1,173 @@
+import api from '@config/api';
+
+// Product from API (raw response)
+interface ProductResponse {
+  id: number;
+  shop_id?: number;
+  name: string;
+  sku: string;
+  price: string | number;
+  quantity: number;
+  cost?: string | number;
+  status: 'available' | 'unavailable';
+  condition?: string;
+}
+
+// Product for app usage (parsed)
+export interface Product {
+  id: number;
+  shop_id?: number;
+  name: string;
+  sku: string;
+  price: number;
+  quantity: number;
+  cost: number;
+  status: 'available' | 'unavailable';
+  condition?: string;
+}
+
+// Product in cart with quantity to purchase
+export interface CartItem extends Product {
+  cartQty: number;
+}
+
+// Transaction item for API
+export interface TransactionItem {
+  product_id: number;
+  quantity: number;
+  price: number;
+}
+
+// Payment item for transaction
+export interface PaymentItem {
+  payment_method_id: number; // 1 = cash, 2 = card
+  amount: number;
+}
+
+// Transaction payload for checkout
+export interface TransactionPayload {
+  items: TransactionItem[];
+  payments: PaymentItem[];
+  customer_id?: number | null;
+  subtotal: number;
+  tax: number;
+  total: number;
+  notes?: string;
+}
+
+// Parse product response to convert string prices to numbers
+const parseProduct = (product: ProductResponse): Product => ({
+  id: product.id,
+  shop_id: product.shop_id,
+  name: product.name,
+  sku: product.sku,
+  price: typeof product.price === 'string' ? parseFloat(product.price) : product.price,
+  quantity: product.quantity,
+  cost: typeof product.cost === 'string' ? parseFloat(product.cost) : (product.cost || 0),
+  status: product.status,
+  condition: product.condition,
+});
+
+// Search products by name or SKU
+export const searchProducts = async (query: string): Promise<Product[]> => {
+  try {
+    const response = await api.get('/products/search', {
+      params: {query},
+    });
+
+    const products = response.data.products || response.data || [];
+    return products.map(parseProduct);
+  } catch (error) {
+    console.log('Search error:', error);
+    return [];
+  }
+};
+
+// Get product by barcode/SKU
+export const getProductBySku = async (sku: string): Promise<Product | null> => {
+  try {
+    const response = await api.get(`/products/scan/${sku}`);
+    const product = response.data.product || response.data;
+
+    if (!product) {
+      return null;
+    }
+
+    return parseProduct(product);
+  } catch (error) {
+    console.log('Scan error:', error);
+    return null;
+  }
+};
+
+// Get recently sold products
+export const getRecentProducts = async (): Promise<Product[]> => {
+  try {
+    const response = await api.get('/products/recent');
+    const products = response.data.products || response.data || [];
+    return products.map(parseProduct);
+  } catch (error) {
+    console.log('Recent products error:', error);
+    return [];
+  }
+};
+
+// Complete a sale transaction
+export const createTransaction = async (
+  payload: TransactionPayload,
+): Promise<{success: boolean; transaction_id?: number; message?: string; errors?: string[]}> => {
+  try {
+    const response = await api.post('/transactions', payload);
+
+    if (response.data.success) {
+      return {
+        success: true,
+        transaction_id: response.data.data?.transaction_id || response.data.transaction_id,
+      };
+    }
+
+    return {
+      success: false,
+      message: response.data.message || 'Transaction failed',
+      errors: response.data.errors,
+    };
+  } catch (error: any) {
+    console.log('Transaction error:', error);
+    const errorData = error.response?.data;
+
+    return {
+      success: false,
+      message: errorData?.message || 'Transaction failed',
+      errors: errorData?.errors,
+    };
+  }
+};
+
+// Dashboard stats response
+export interface DashboardStats {
+  today_sales: number;
+  today_orders: number;
+  today_products_sold: number;
+  today_customers: number;
+}
+
+// Get dashboard stats for today
+export const getDashboardStats = async (): Promise<DashboardStats | null> => {
+  try {
+    const response = await api.get('/dashboard/stats');
+
+    if (response.data.success && response.data.data) {
+      return {
+        today_sales: response.data.data.today_sales || 0,
+        today_orders: response.data.data.today_orders || 0,
+        today_products_sold: response.data.data.today_products_sold || 0,
+        today_customers: response.data.data.today_customers || 0,
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.log('Dashboard stats error:', error);
+    return null;
+  }
+};

@@ -1,40 +1,97 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
+import {CompositeNavigationProp, useNavigation, CommonActions} from '@react-navigation/native';
+import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
-import {TabParamList} from '@types';
-import {SPACING} from '@constants/theme';
+import {TabParamList, RootStackParamList, SaleStackParamList} from '@types';
+import {COLORS, SPACING} from '@constants/theme';
+import {useCart} from '../context/CartContext';
+import ProductSearchModal from '@components/ProductSearchModal';
+import RecentProductsModal from '@components/RecentProductsModal';
+import {authService} from '@services/authService';
+import {Product} from '@services/productService';
 
-type SaleScreenProps = {
-  navigation: BottomTabNavigationProp<TabParamList, 'SaleTab'>;
-};
+type SaleScreenNavigationProp = CompositeNavigationProp<
+  NativeStackNavigationProp<SaleStackParamList, 'Sale'>,
+  CompositeNavigationProp<
+    BottomTabNavigationProp<TabParamList, 'SaleTab'>,
+    NativeStackNavigationProp<RootStackParamList>
+  >
+>;
 
-const DARK_BG = '#0D0D1A';
-const CARD_BG = '#1A1A2E';
-const PURPLE = '#6C63FF';
-const PINK = '#FF6B9D';
-const GREEN = '#4CAF50';
-const ORANGE = '#FF9800';
+const SaleScreen: React.FC = () => {
+  const navigation = useNavigation<SaleScreenNavigationProp>();
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [recentModalVisible, setRecentModalVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const {
+    cartItems,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    getSubtotal,
+  } = useCart();
 
-const SaleScreen: React.FC<SaleScreenProps> = ({navigation}) => {
+  // Handle logout
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await authService.logout();
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{name: 'Login'}],
+      }),
+    );
+  };
+
   const quickActions = [
-    {icon: 'barcode-scan', label: 'Scan', color: PURPLE},
-    {icon: 'magnify', label: 'Search', color: PINK},
-    {icon: 'history', label: 'Recent', color: ORANGE},
+    {
+      icon: 'barcode-scan',
+      label: 'Scan',
+      color: COLORS.purple,
+      onPress: () => navigation.navigate('BarcodeScanner'),
+    },
+    {
+      icon: 'magnify',
+      label: 'Search',
+      color: COLORS.pink,
+      onPress: () => setSearchModalVisible(true),
+    },
+    {
+      icon: 'history',
+      label: 'Recent',
+      color: COLORS.orange,
+      onPress: () => setRecentModalVisible(true),
+    },
   ];
 
-  const recentItems = [
-    {name: 'Product 1', price: '$12.99', qty: 2},
-    {name: 'Product 2', price: '$8.50', qty: 1},
-    {name: 'Product 3', price: '$24.00', qty: 3},
-  ];
+  // Handle add product from search modal
+  const handleAddToCart = (product: Product) => {
+    addToCart(product);
+  };
+
+  // Handle checkout navigation
+  const handleCheckout = () => {
+    if (cartItems.length === 0) {
+      Toast.show({
+        type: 'info',
+        text1: 'Empty Cart',
+        text2: 'Please add products to checkout.',
+      });
+      return;
+    }
+    navigation.navigate('Checkout');
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -43,12 +100,24 @@ const SaleScreen: React.FC<SaleScreenProps> = ({navigation}) => {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.navigate('HomeTab')}>
-          <Icon source="arrow-left" size={24} color="#FFFFFF" />
+          <Icon source="arrow-left" size={24} color={COLORS.white} />
         </TouchableOpacity>
         <Text style={styles.title}>New Sale</Text>
-        <TouchableOpacity style={styles.menuButton}>
-          <Icon source="dots-vertical" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Icon source="bell-outline" size={24} color={COLORS.white} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleLogout}
+            disabled={isLoggingOut}>
+            {isLoggingOut ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Icon source="power" size={24} color={COLORS.white} />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -59,7 +128,10 @@ const SaleScreen: React.FC<SaleScreenProps> = ({navigation}) => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.quickActions}>
           {quickActions.map((action, index) => (
-            <TouchableOpacity key={index} style={styles.actionButton}>
+            <TouchableOpacity
+              key={index}
+              style={styles.actionButton}
+              onPress={action.onPress}>
               <View
                 style={[
                   styles.actionIconContainer,
@@ -74,9 +146,11 @@ const SaleScreen: React.FC<SaleScreenProps> = ({navigation}) => {
 
         {/* Main Actions */}
         <View style={styles.mainActions}>
-          <TouchableOpacity style={styles.scanButton}>
+          <TouchableOpacity
+            style={styles.scanButton}
+            onPress={() => navigation.navigate('BarcodeScanner')}>
             <View style={styles.scanIconWrapper}>
-              <Icon source="barcode-scan" size={32} color="#FFFFFF" />
+              <Icon source="barcode-scan" size={32} color={COLORS.white} />
             </View>
             <View style={styles.scanTextWrapper}>
               <Text style={styles.scanTitle}>Scan Barcode</Text>
@@ -84,55 +158,132 @@ const SaleScreen: React.FC<SaleScreenProps> = ({navigation}) => {
                 Use camera to scan product
               </Text>
             </View>
-            <Icon source="chevron-right" size={24} color="#FFFFFF" />
+            <Icon source="chevron-right" size={24} color={COLORS.white} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.searchButton}>
+          <TouchableOpacity
+            style={styles.searchButton}
+            onPress={() => setSearchModalVisible(true)}>
             <View style={styles.searchIconWrapper}>
-              <Icon source="magnify" size={32} color="#FFFFFF" />
+              <Icon source="magnify" size={32} color={COLORS.white} />
             </View>
             <View style={styles.searchTextWrapper}>
               <Text style={styles.searchTitle}>Search Products</Text>
-              <Text style={styles.searchSubtitle}>
-                Find by name or SKU
-              </Text>
+              <Text style={styles.searchSubtitle}>Find by name or SKU</Text>
             </View>
-            <Icon source="chevron-right" size={24} color="#FFFFFF" />
+            <Icon source="chevron-right" size={24} color={COLORS.white} />
           </TouchableOpacity>
         </View>
 
-        {/* Recent Items */}
-        <Text style={styles.sectionTitle}>Recent Items</Text>
-        <View style={styles.recentList}>
-          {recentItems.map((item, index) => (
-            <TouchableOpacity key={index} style={styles.recentItem}>
-              <View style={styles.recentIcon}>
-                <Icon source="package-variant" size={24} color={PURPLE} />
+        {/* Cart Section */}
+        <Text style={styles.sectionTitle}>
+          Cart {cartItems.length > 0 && `(${cartItems.length})`}
+        </Text>
+
+        {cartItems.length === 0 ? (
+          <View style={styles.emptyCart}>
+            <Icon source="cart-outline" size={48} color={COLORS.textMuted} />
+            <Text style={styles.emptyCartText}>Cart is empty</Text>
+            <Text style={styles.emptyCartSubtext}>
+              Search or scan products to add
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.cartList}>
+            {cartItems.map(item => (
+              <View key={item.id} style={styles.cartItem}>
+                <View style={styles.cartItemIcon}>
+                  <Icon
+                    source="package-variant"
+                    size={24}
+                    color={COLORS.purple}
+                  />
+                </View>
+                <View style={styles.cartItemInfo}>
+                  <View style={styles.cartItemHeader}>
+                    <Text style={styles.cartItemName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.removeButton}
+                      onPress={() => removeFromCart(item.id)}>
+                      <Icon source="close" size={16} color={COLORS.danger} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.cartItemSku}>SKU: {item.sku}</Text>
+                  <View style={styles.cartItemFooter}>
+                    <Text style={styles.cartItemStock}>
+                      Stock: {item.quantity}
+                    </Text>
+                    <View style={styles.quantityControls}>
+                      <TouchableOpacity
+                        style={styles.quantityButton}
+                        onPress={() => updateQuantity(item.id, item.cartQty - 1)}>
+                        <Icon source="minus" size={16} color={COLORS.white} />
+                      </TouchableOpacity>
+                      <Text style={styles.quantityText}>{item.cartQty}</Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.quantityButton,
+                          item.cartQty >= item.quantity && styles.quantityButtonDisabled,
+                        ]}
+                        onPress={() => {
+                          if (item.cartQty < item.quantity) {
+                            updateQuantity(item.id, item.cartQty + 1);
+                          } else {
+                            Toast.show({
+                              type: 'info',
+                              text1: 'Stock Limit',
+                              text2: `Only ${item.quantity} available in stock.`,
+                            });
+                          }
+                        }}>
+                        <Icon source="plus" size={16} color={COLORS.white} />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.cartItemPrice}>
+                      ${(item.price * item.cartQty).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
               </View>
-              <View style={styles.recentInfo}>
-                <Text style={styles.recentName}>{item.name}</Text>
-                <Text style={styles.recentQty}>Last qty: {item.qty}</Text>
-              </View>
-              <Text style={styles.recentPrice}>{item.price}</Text>
-              <TouchableOpacity style={styles.addButton}>
-                <Icon source="plus" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
 
         {/* Checkout Button */}
-        <TouchableOpacity style={styles.checkoutButton}>
-          <Icon source="cash-register" size={24} color="#FFFFFF" />
+        <TouchableOpacity
+          style={[
+            styles.checkoutButton,
+            cartItems.length === 0 && styles.checkoutButtonDisabled,
+          ]}
+          onPress={handleCheckout}>
+          <Icon source="cash-register" size={24} color={COLORS.white} />
           <Text style={styles.checkoutText}>Proceed to Checkout</Text>
           <View style={styles.checkoutBadge}>
-            <Text style={styles.checkoutBadgeText}>$0.00</Text>
+            <Text style={styles.checkoutBadgeText}>
+              ${getSubtotal().toFixed(2)}
+            </Text>
           </View>
         </TouchableOpacity>
 
         {/* Spacer for bottom tab */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Search Modal */}
+      <ProductSearchModal
+        visible={searchModalVisible}
+        onClose={() => setSearchModalVisible(false)}
+        onAddToCart={handleAddToCart}
+      />
+
+      {/* Recent Products Modal */}
+      <RecentProductsModal
+        visible={recentModalVisible}
+        onClose={() => setRecentModalVisible(false)}
+        onAddToCart={handleAddToCart}
+      />
     </SafeAreaView>
   );
 };
@@ -140,7 +291,7 @@ const SaleScreen: React.FC<SaleScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: DARK_BG,
+    backgroundColor: COLORS.darkBg,
   },
   header: {
     flexDirection: 'row',
@@ -153,20 +304,24 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.white,
   },
-  menuButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  iconButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -179,7 +334,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.white,
     marginBottom: SPACING.md,
   },
   quickActions: {
@@ -201,7 +356,7 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 12,
-    color: '#8B8BA7',
+    color: COLORS.textSecondary,
     fontWeight: '500',
   },
   mainActions: {
@@ -211,7 +366,7 @@ const styles = StyleSheet.create({
   scanButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: PURPLE,
+    backgroundColor: COLORS.purple,
     borderRadius: 16,
     padding: SPACING.md,
   },
@@ -230,7 +385,7 @@ const styles = StyleSheet.create({
   scanTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.white,
   },
   scanSubtitle: {
     fontSize: 13,
@@ -240,17 +395,17 @@ const styles = StyleSheet.create({
   searchButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     borderRadius: 16,
     padding: SPACING.md,
     borderWidth: 1,
-    borderColor: '#2A2A4A',
+    borderColor: COLORS.border,
   },
   searchIconWrapper: {
     width: 50,
     height: 50,
     borderRadius: 14,
-    backgroundColor: PINK + '20',
+    backgroundColor: COLORS.pink + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -261,58 +416,119 @@ const styles = StyleSheet.create({
   searchTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.white,
   },
   searchSubtitle: {
     fontSize: 13,
-    color: '#8B8BA7',
+    color: COLORS.textSecondary,
     marginTop: 2,
   },
-  recentList: {
-    backgroundColor: CARD_BG,
+  emptyCart: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    padding: SPACING.xl,
+    alignItems: 'center',
+  },
+  emptyCartText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    marginTop: SPACING.md,
+  },
+  emptyCartSubtext: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+  },
+  cartList: {
+    backgroundColor: COLORS.cardBg,
     borderRadius: 16,
     overflow: 'hidden',
   },
-  recentItem: {
+  cartItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A4A',
+    borderBottomColor: COLORS.border,
   },
-  recentIcon: {
+  cartItemIcon: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: PURPLE + '20',
+    backgroundColor: COLORS.purple + '20',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
   },
-  recentInfo: {
+  cartItemInfo: {
     flex: 1,
     marginLeft: SPACING.md,
   },
-  recentName: {
+  cartItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  cartItemName: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#FFFFFF',
+    color: COLORS.white,
+    flex: 1,
+    marginRight: SPACING.sm,
+    lineHeight: 20,
   },
-  recentQty: {
-    fontSize: 13,
-    color: '#8B8BA7',
-    marginTop: 2,
+  cartItemSku: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 4,
   },
-  recentPrice: {
-    fontSize: 15,
+  cartItemFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: SPACING.sm,
+  },
+  cartItemStock: {
+    fontSize: 11,
+    color: COLORS.green,
+    flex: 1,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quantityButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: COLORS.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityButtonDisabled: {
+    opacity: 0.4,
+  },
+  quantityText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: GREEN,
-    marginRight: SPACING.md,
+    color: COLORS.white,
+    marginHorizontal: SPACING.sm,
+    minWidth: 20,
+    textAlign: 'center',
   },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: PURPLE,
+  cartItemPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.green,
+    marginLeft: SPACING.md,
+    minWidth: 55,
+    textAlign: 'right',
+  },
+  removeButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: COLORS.danger + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -320,11 +536,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: GREEN,
+    backgroundColor: COLORS.green,
     borderRadius: 16,
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
     marginTop: SPACING.lg,
+  },
+  checkoutButtonDisabled: {
+    opacity: 0.5,
   },
   bottomSpacer: {
     height: 80,
@@ -332,7 +551,7 @@ const styles = StyleSheet.create({
   checkoutText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: COLORS.white,
     marginLeft: SPACING.sm,
     flex: 1,
   },
@@ -345,7 +564,7 @@ const styles = StyleSheet.create({
   checkoutBadgeText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: COLORS.white,
   },
 });
 

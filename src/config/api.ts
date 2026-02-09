@@ -1,13 +1,45 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {Platform} from 'react-native';
 
-// Base URL - Production API
-const API_URL = 'https://app.hobbydex.net/api';
+// ===========================================
+// API CONFIGURATION
+// ===========================================
+
+// Production API URL
+const PRODUCTION_API_URL = 'https://app.hobbydex.net/api';
+
+// Development API URLs
+const DEV_API_URL_IOS = 'http://localhost:8000/api';
+const DEV_API_URL_ANDROID = 'http://10.0.2.2:8000/api';
+
+// API Timeout (in milliseconds)
+const API_TIMEOUT = 10000;
+
+// ===========================================
+// AUTO-SELECT URL BASED ON BUILD TYPE
+// ===========================================
+// __DEV__ is true for debug builds, false for release builds
+
+const getApiUrl = (): string => {
+  if (__DEV__) {
+    // Development: use local server
+    return Platform.OS === 'android' ? DEV_API_URL_ANDROID : DEV_API_URL_IOS;
+  }
+  // Production: use live server
+  return PRODUCTION_API_URL;
+};
+
+const API_URL = getApiUrl();
+
+// Log environment info
+console.log(__DEV__ ? '🔧 Development Mode' : '🚀 Production Mode');
+console.log('🌐 API URL:', API_URL);
 
 // Create axios instance
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: API_TIMEOUT,
   headers: {
     Accept: 'application/json',
     'Content-Type': 'application/json',

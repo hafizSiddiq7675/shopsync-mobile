@@ -61,6 +61,8 @@ export type RootStackParamList = {
   Main: undefined;
   ProductDetail: {productId: string};
   Cart: undefined;
+  Checkout: undefined;
+  BarcodeScanner: undefined;
 };
 
 // Tab Navigation types
@@ -69,4 +71,10 @@ export type TabParamList = {
   SaleTab: undefined;
   BuyTab: undefined;
   SettingsTab: undefined;
+};
+
+// Sale Stack Navigation types (nested in SaleTab)
+export type SaleStackParamList = {
+  Sale: undefined;
+  Checkout: undefined;
 };

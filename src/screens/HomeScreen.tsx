@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,30 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  RefreshControl,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useNavigation, CommonActions} from '@react-navigation/native';
+import {useNavigation, CommonActions, useFocusEffect} from '@react-navigation/native';
 import {Icon} from 'react-native-paper';
 import {AuthUser, Shop} from '@types';
-import {SPACING} from '@constants/theme';
+import {COLORS, SPACING, RADIUS, SHADOWS} from '@constants/theme';
 import {authService} from '@services/authService';
+import {getDashboardStats, DashboardStats} from '@services/productService';
 
-const DARK_BG = '#0D0D1A';
-const CARD_BG = '#1A1A2E';
-const PURPLE = '#6C63FF';
-const PINK = '#FF6B9D';
-const GREEN = '#4CAF50';
-const ORANGE = '#FF9800';
+// Format large numbers with abbreviations
+const formatNumber = (num: number, isCurrency: boolean = false): string => {
+  const prefix = isCurrency ? '$' : '';
+  if (num >= 1000000) {
+    return `${prefix}${(num / 1000000).toFixed(1)}M`;
+  }
+  if (num >= 10000) {
+    return `${prefix}${(num / 1000).toFixed(1)}K`;
+  }
+  if (isCurrency) {
+    return `${prefix}${num.toFixed(2)}`;
+  }
+  return num.toLocaleString();
+};
 
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -27,10 +37,34 @@ const HomeScreen: React.FC = () => {
   const [shop, setShop] = useState<Shop | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadUserData();
   }, []);
+
+  // Refresh stats when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardStats();
+    }, []),
+  );
+
+  // Load dashboard stats
+  const loadDashboardStats = async () => {
+    const dashboardStats = await getDashboardStats();
+    if (dashboardStats) {
+      setStats(dashboardStats);
+    }
+  };
+
+  // Pull to refresh
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([loadUserData(), loadDashboardStats()]);
+    setIsRefreshing(false);
+  };
 
   const loadUserData = async () => {
     setIsLoading(true);
@@ -67,10 +101,30 @@ const HomeScreen: React.FC = () => {
   };
 
   const quickStats = [
-    {icon: 'cash-register', label: 'Sales', value: '$0', color: GREEN},
-    {icon: 'shopping', label: 'Orders', value: '0', color: PURPLE},
-    {icon: 'package-variant', label: 'Products', value: '0', color: ORANGE},
-    {icon: 'account-group', label: 'Customers', value: '0', color: PINK},
+    {
+      icon: 'cash-register',
+      label: 'Sales',
+      value: stats ? formatNumber(stats.today_sales, true) : '$0.00',
+      color: COLORS.green,
+    },
+    {
+      icon: 'shopping',
+      label: 'Orders',
+      value: stats ? formatNumber(stats.today_orders) : '0',
+      color: COLORS.purple,
+    },
+    {
+      icon: 'package-variant',
+      label: 'Products',
+      value: stats ? formatNumber(stats.today_products_sold) : '0',
+      color: COLORS.orange,
+    },
+    {
+      icon: 'account-group',
+      label: 'Customers',
+      value: stats ? formatNumber(stats.today_customers) : '0',
+      color: COLORS.pink,
+    },
   ];
 
   return (
@@ -110,7 +164,7 @@ const HomeScreen: React.FC = () => {
             {isLoggingOut ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Icon source="logout" size={24} color="#FFFFFF" />
+              <Icon source="power" size={24} color="#FFFFFF" />
             )}
           </TouchableOpacity>
         </View>
@@ -119,7 +173,15 @@ const HomeScreen: React.FC = () => {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.purple}
+            colors={[COLORS.purple]}
+          />
+        }>
         {/* Welcome Card */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeContent}>
@@ -129,7 +191,7 @@ const HomeScreen: React.FC = () => {
             </Text>
           </View>
           <View style={styles.welcomeIcon}>
-            <Icon source="store" size={48} color={PURPLE} />
+            <Icon source="store" size={48} color={COLORS.purple} />
           </View>
         </View>
 
@@ -145,7 +207,13 @@ const HomeScreen: React.FC = () => {
                 ]}>
                 <Icon source={stat.icon} size={24} color={stat.color} />
               </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text
+                style={styles.statValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}>
+                {stat.value}
+              </Text>
               <Text style={styles.statLabel}>{stat.label}</Text>
             </View>
           ))}
@@ -158,7 +226,7 @@ const HomeScreen: React.FC = () => {
             style={styles.actionCard}
             activeOpacity={0.8}
             onPress={() => navigation.navigate('SaleTab' as never)}>
-            <View style={[styles.actionIconWrapper, {backgroundColor: PURPLE}]}>
+            <View style={[styles.actionIconWrapper, {backgroundColor: COLORS.purple}]}>
               <Icon source="cart" size={32} color="#FFFFFF" />
             </View>
             <View style={styles.actionContent}>
@@ -174,7 +242,7 @@ const HomeScreen: React.FC = () => {
             style={styles.actionCard}
             activeOpacity={0.8}
             onPress={() => navigation.navigate('BuyTab' as never)}>
-            <View style={[styles.actionIconWrapper, {backgroundColor: GREEN}]}>
+            <View style={[styles.actionIconWrapper, {backgroundColor: COLORS.green}]}>
               <Icon source="currency-usd" size={32} color="#FFFFFF" />
             </View>
             <View style={styles.actionContent}>
@@ -192,16 +260,16 @@ const HomeScreen: React.FC = () => {
         <View style={styles.moreOptions}>
           <TouchableOpacity style={styles.optionItem}>
             <View
-              style={[styles.optionIcon, {backgroundColor: ORANGE + '20'}]}>
-              <Icon source="history" size={22} color={ORANGE} />
+              style={[styles.optionIcon, {backgroundColor: COLORS.orange + '20'}]}>
+              <Icon source="history" size={22} color={COLORS.orange} />
             </View>
             <Text style={styles.optionText}>Transaction History</Text>
             <Icon source="chevron-right" size={20} color="#5A5A7A" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.optionItem}>
-            <View style={[styles.optionIcon, {backgroundColor: PINK + '20'}]}>
-              <Icon source="chart-line" size={22} color={PINK} />
+            <View style={[styles.optionIcon, {backgroundColor: COLORS.pink + '20'}]}>
+              <Icon source="chart-line" size={22} color={COLORS.pink} />
             </View>
             <Text style={styles.optionText}>Reports & Analytics</Text>
             <Icon source="chevron-right" size={20} color="#5A5A7A" />
@@ -209,8 +277,8 @@ const HomeScreen: React.FC = () => {
 
           <TouchableOpacity style={styles.optionItem}>
             <View
-              style={[styles.optionIcon, {backgroundColor: PURPLE + '20'}]}>
-              <Icon source="cog-outline" size={22} color={PURPLE} />
+              style={[styles.optionIcon, {backgroundColor: COLORS.purple + '20'}]}>
+              <Icon source="cog-outline" size={22} color={COLORS.purple} />
             </View>
             <Text style={styles.optionText}>Settings</Text>
             <Icon source="chevron-right" size={20} color="#5A5A7A" />
@@ -230,7 +298,7 @@ const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: DARK_BG,
+    backgroundColor: COLORS.darkBg,
   },
   header: {
     flexDirection: 'row',
@@ -247,7 +315,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: PURPLE,
+    backgroundColor: COLORS.purple,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -284,8 +352,8 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
-    backgroundColor: CARD_BG,
+    borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -298,10 +366,11 @@ const styles = StyleSheet.create({
   welcomeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CARD_BG,
-    borderRadius: 20,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
+    ...SHADOWS.medium,
   },
   welcomeContent: {
     flex: 1,
@@ -319,8 +388,8 @@ const styles = StyleSheet.create({
   welcomeIcon: {
     width: 70,
     height: 70,
-    borderRadius: 20,
-    backgroundColor: PURPLE + '20',
+    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.purple + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -338,15 +407,16 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '48%',
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   statIconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.sm,
@@ -368,14 +438,15 @@ const styles = StyleSheet.create({
   actionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
+    ...SHADOWS.medium,
   },
   actionIconWrapper: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -394,22 +465,23 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   moreOptions: {
-    backgroundColor: CARD_BG,
-    borderRadius: 16,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
     marginBottom: SPACING.lg,
+    ...SHADOWS.small,
   },
   optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A4A',
+    borderBottomColor: COLORS.border,
   },
   optionIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

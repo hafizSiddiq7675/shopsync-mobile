@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {View, ActivityIndicator, StyleSheet} from 'react-native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {LoginScreen} from '@screens';
+import {LoginScreen, BarcodeScannerScreen} from '@screens';
 import {RootStackParamList} from '@types';
 import {authService} from '@services/authService';
 import {COLORS} from '@constants/theme';
@@ -45,6 +45,7 @@ const AppNavigator: React.FC = () => {
       }}>
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Main" component={TabNavigator} />
+      <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
     </Stack.Navigator>
   );
 };

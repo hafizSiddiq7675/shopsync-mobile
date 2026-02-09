@@ -9,24 +9,19 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
+import Toast from 'react-native-toast-message';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import {RootStackParamList} from '@types';
-import {SPACING} from '@constants/theme';
+import {COLORS, SPACING} from '@constants/theme';
 import {authService} from '@services/authService';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
 };
-
-const DARK_BG = '#0D0D1A';
-const CARD_BG = '#1A1A2E';
-const PURPLE = '#6C63FF';
-const PINK = '#FF6B9D';
 
 const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [email, setEmail] = useState('');
@@ -63,7 +58,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         errorMessage = err.message;
       }
       setError(errorMessage);
-      Alert.alert('Login Failed', errorMessage);
+      Toast.show({
+        type: 'error',
+        text1: 'Login Failed',
+        text2: errorMessage,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +94,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                 <View style={styles.inputWrapper}>
                   <Text style={styles.label}>Username</Text>
                   <View style={styles.inputContainer}>
-                    <Icon source="account" size={20} color={PURPLE} />
+                    <Icon source="account" size={20} color={COLORS.purple} />
                     <TextInput
                       style={styles.input}
                       placeholder="Enter username"
@@ -113,7 +112,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                 <View style={styles.inputWrapper}>
                   <Text style={styles.label}>Password</Text>
                   <View style={styles.inputContainer}>
-                    <Icon source="lock" size={20} color={PURPLE} />
+                    <Icon source="lock" size={20} color={COLORS.purple} />
                     <TextInput
                       style={styles.input}
                       placeholder="Enter password"
@@ -170,7 +169,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: DARK_BG,
+    backgroundColor: COLORS.darkBg,
   },
   keyboardView: {
     flex: 1,
@@ -188,7 +187,7 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 20,
-    backgroundColor: PURPLE,
+    backgroundColor: COLORS.purple,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.sm,
@@ -210,7 +209,7 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 0.6,
-    backgroundColor: CARD_BG,
+    backgroundColor: COLORS.cardBg,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: SPACING.lg,
@@ -250,7 +249,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: SPACING.md,
-    backgroundColor: PURPLE,
+    backgroundColor: COLORS.purple,
   },
   signInButtonDisabled: {
     backgroundColor: '#3A3A5A',
@@ -261,7 +260,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   errorText: {
-    color: PINK,
+    color: COLORS.pink,
     fontSize: 13,
     textAlign: 'center',
   },

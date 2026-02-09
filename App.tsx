@@ -1,5 +1,6 @@
 import React from 'react';
 import {StatusBar} from 'react-native';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {NavigationContainer} from '@react-navigation/native';
 import {PaperProvider} from 'react-native-paper';
@@ -22,21 +23,23 @@ const queryClient = new QueryClient({
 
 function App() {
   return (
-    <ReduxProvider store={store}>
-      <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider>
-          <PaperProvider>
-            <NavigationContainer>
-              <CartProvider>
-                <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-                <AppNavigator />
-              </CartProvider>
-            </NavigationContainer>
-            <Toast />
-          </PaperProvider>
-        </SafeAreaProvider>
-      </QueryClientProvider>
-    </ReduxProvider>
+    <GestureHandlerRootView style={{flex: 1}}>
+      <ReduxProvider store={store}>
+        <QueryClientProvider client={queryClient}>
+          <SafeAreaProvider>
+            <PaperProvider>
+              <NavigationContainer>
+                <CartProvider>
+                  <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+                  <AppNavigator />
+                </CartProvider>
+              </NavigationContainer>
+              <Toast />
+            </PaperProvider>
+          </SafeAreaProvider>
+        </QueryClientProvider>
+      </ReduxProvider>
+    </GestureHandlerRootView>
   );
 }
 

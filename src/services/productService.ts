@@ -31,11 +31,30 @@ export interface CartItem extends Product {
   cartQty: number;
 }
 
-// Transaction item for API
+// Transaction item for API (regular product)
 export interface TransactionItem {
   product_id: number;
   quantity: number;
   price: number;
+}
+
+// Custom product transaction item
+export interface CustomTransactionItem {
+  is_custom: true;
+  name: string;
+  cost: number;
+  price: number;
+  quantity: number;
+}
+
+// Custom product in cart
+export interface CustomCartItem {
+  id: string; // Unique ID for cart management (e.g., 'custom_1234567890')
+  is_custom: true;
+  name: string;
+  cost: number;
+  price: number;
+  cartQty: number;
 }
 
 // Payment item for transaction
@@ -55,7 +74,7 @@ export interface NewCustomerData {
 
 // Transaction payload for checkout
 export interface TransactionPayload {
-  items: TransactionItem[];
+  items: (TransactionItem | CustomTransactionItem)[];
   payments: PaymentItem[];
   customer_id?: number | null;
   new_customer?: NewCustomerData;

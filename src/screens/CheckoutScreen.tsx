@@ -6,11 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Switch,
   TextInput,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Toast from 'react-native-toast-message';
@@ -19,9 +15,9 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useNavigation, CommonActions} from '@react-navigation/native';
 import {Icon} from 'react-native-paper';
 import {SaleStackParamList} from '@types';
-import {COLORS, SPACING} from '@constants/theme';
-import {useCart} from '../context/CartContext';
-import {createTransaction, TransactionPayload} from '@services/productService';
+import {COLORS, SPACING, RADIUS, SHADOWS} from '@constants/theme';
+import {useCart, CustomProductForm} from '../context/CartContext';
+import {createTransaction, TransactionPayload, CustomTransactionItem} from '@services/productService';
 import {getPaymentMethods, PaymentMethod} from '@services/paymentService';
 import {
   searchCustomers,
@@ -30,6 +26,7 @@ import {
   CustomerSearchResult,
 } from '@services/customerService';
 import {authService} from '@services/authService';
+import DraggableBottomSheet from '../components/DraggableBottomSheet';
 
 type CheckoutScreenNavigationProp = NativeStackNavigationProp<
   SaleStackParamList,
@@ -55,9 +52,17 @@ interface NewCustomerForm {
 // Preset amounts for Points and Store Credit
 const PRESET_AMOUNTS = [5, 10, 25];
 
+// Custom product form interface
+interface CustomProductFormState {
+  name: string;
+  cost: string;
+  price: string;
+  quantity: string;
+}
+
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<CheckoutScreenNavigationProp>();
-  const {cartItems, getSubtotal, clearCart} = useCart();
+  const {cartItems, getSubtotal, clearCart, updateQuantity, removeFromCart, canAddMore, addCustomProduct, isCustomItem} = useCart();
   const [isLoading, setIsLoading] = useState(false);
   const [taxEnabled, setTaxEnabled] = useState(true);
   const [taxRate, setTaxRate] = useState(10);
@@ -101,6 +106,15 @@ const CheckoutScreen: React.FC = () => {
 
   // Transaction notes
   const [transactionNotes, setTransactionNotes] = useState('');
+
+  // Custom product modal
+  const [showCustomProductModal, setShowCustomProductModal] = useState(false);
+  const [customProductForm, setCustomProductForm] = useState<CustomProductFormState>({
+    name: '',
+    cost: '',
+    price: '',
+    quantity: '1',
+  });
 
   // Load payment methods on mount
   useEffect(() => {
@@ -288,6 +302,74 @@ const CheckoutScreen: React.FC = () => {
       type: 'success',
       text1: 'New Customer Added',
       text2: `${newCustomerForm.first_name} ${newCustomerForm.last_name}`,
+    });
+  };
+
+  // Handle save custom product
+  const handleSaveCustomProduct = () => {
+    // Validate required fields
+    if (!customProductForm.name.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Product name is required',
+      });
+      return;
+    }
+    if (!customProductForm.price.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Price is required',
+      });
+      return;
+    }
+
+    const price = parseFloat(customProductForm.price);
+    const cost = parseFloat(customProductForm.cost) || 0;
+    const quantity = parseInt(customProductForm.quantity) || 1;
+
+    if (isNaN(price) || price <= 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please enter a valid price',
+      });
+      return;
+    }
+
+    if (quantity <= 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Quantity must be at least 1',
+      });
+      return;
+    }
+
+    // Add custom product to cart
+    const customProduct: CustomProductForm = {
+      name: customProductForm.name.trim(),
+      cost: cost,
+      price: price,
+      quantity: quantity,
+    };
+
+    addCustomProduct(customProduct);
+
+    // Reset form and close modal
+    setCustomProductForm({
+      name: '',
+      cost: '',
+      price: '',
+      quantity: '1',
+    });
+    setShowCustomProductModal(false);
+
+    Toast.show({
+      type: 'success',
+      text1: 'Product Added',
+      text2: `${customProduct.name} added to cart`,
     });
   };
 
@@ -496,12 +578,29 @@ const CheckoutScreen: React.FC = () => {
     const pointsUsed = getUsedPoints();
     const storeCreditUsed = getUsedStoreCredit();
 
+    // Build items array - handle both regular and custom products
+    const items = cartItems.map(item => {
+      if (isCustomItem(item)) {
+        // Custom product
+        return {
+          is_custom: true,
+          name: item.name,
+          cost: item.cost,
+          price: item.price,
+          quantity: item.cartQty,
+        } as CustomTransactionItem;
+      } else {
+        // Regular product
+        return {
+          product_id: item.id as number,
+          quantity: item.cartQty,
+          price: item.price,
+        };
+      }
+    });
+
     const payload: TransactionPayload = {
-      items: cartItems.map(item => ({
-        product_id: item.id,
-        quantity: item.cartQty,
-        price: item.price,
-      })),
+      items: items,
       payments: payments.map(p => ({
         payment_method_id: p.payment_method_id,
         amount: parseFloat(p.amount),
@@ -586,7 +685,7 @@ const CheckoutScreen: React.FC = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         {/* Customer Selection - First (Required) */}
-        <Text style={styles.sectionTitle}>Customer {!selectedCustomer && !isNewCustomer && <Text style={styles.requiredStar}>*</Text>}</Text>
+        {/* <Text style={styles.sectionTitle}>Customer {!selectedCustomer && !isNewCustomer && <Text style={styles.requiredStar}>*</Text>}</Text> */}
         <View style={[styles.customerSection, customerError && styles.customerSectionError]}>
           {selectedCustomer ? (
             <View style={styles.selectedCustomer}>
@@ -717,51 +816,273 @@ const CheckoutScreen: React.FC = () => {
                   Choose customer for sale
                 </Text>
               </View>
-              <Icon source="chevron-right" size={24} color={COLORS.textSecondary} />
+              <Icon source="chevron-right" size={24} color={COLORS.white} />
             </TouchableOpacity>
           )}
         </View>
 
+        {/* Add Custom Product */}
+        <TouchableOpacity
+          style={styles.addCustomProductCard}
+          onPress={() => setShowCustomProductModal(true)}
+          activeOpacity={0.8}>
+          <View style={styles.addCustomProductIcon}>
+            <Icon source="plus-box" size={28} color={COLORS.warningBg} />
+          </View>
+          <View style={styles.addCustomProductContent}>
+            <Text style={styles.addCustomProductTitle}>Add Custom Product</Text>
+            <Text style={styles.addCustomProductSubtitle}>Create a one-time product</Text>
+          </View>
+          <Icon source="chevron-right" size={24} color={COLORS.white} />
+        </TouchableOpacity>
+
         {/* Order Summary */}
-        <Text style={styles.sectionTitle}>Order Summary</Text>
-        <View style={styles.orderSummary}>
-          {cartItems.map(item => (
-            <View key={item.id} style={styles.orderItem}>
-              <View style={styles.orderItemLeft}>
-                <Text style={styles.orderItemName}>{item.name}</Text>
-                <Text style={styles.orderItemQty}>
-                  ${item.price.toFixed(2)} x {item.cartQty}
+        <View style={styles.orderSummaryHeader}>
+          <View style={styles.orderSummaryHeaderLeft}>
+            <Icon source="clipboard-list" size={20} color={COLORS.purple} />
+            <Text style={styles.sectionTitle}>Order Summary</Text>
+          </View>
+          <View style={styles.itemCountBadge}>
+            <Text style={styles.itemCountText}>
+              {cartItems.reduce((sum, item) => sum + item.cartQty, 0)} items
+            </Text>
+          </View>
+        </View>
+
+        {/* Product Items */}
+        <View style={styles.orderItemsContainer}>
+          {cartItems.map(item => {
+            const isCustom = isCustomItem(item);
+            const remainingStock = isCustom ? 999 : (item as any).quantity - item.cartQty;
+            const isMaxStock = isCustom ? false : !canAddMore(item.id as number, (item as any).quantity);
+
+            return (
+              <View key={item.id} style={styles.orderItemCard}>
+                {/* Product Icon */}
+                <View style={[styles.orderItemIcon, isCustom && styles.orderItemIconCustom]}>
+                  <Icon
+                    source={isCustom ? 'plus-box' : 'package-variant'}
+                    size={20}
+                    color={isCustom ? COLORS.orange : COLORS.purple}
+                  />
+                </View>
+
+                {/* Product Info */}
+                <View style={styles.orderItemInfo}>
+                  <Text style={styles.orderItemName} numberOfLines={1}>{item.name}</Text>
+                  <Text style={styles.orderItemPrice}>
+                    ${item.price.toFixed(2)} each
+                  </Text>
+                  {isCustom ? (
+                    <View style={styles.customProductBadge}>
+                      <Icon source="plus-box" size={10} color={COLORS.orange} />
+                      <Text style={styles.customProductBadgeText}>Custom Product</Text>
+                    </View>
+                  ) : (
+                    <View style={[
+                      styles.orderItemStockBadge,
+                      isMaxStock && styles.orderItemStockBadgeWarning,
+                    ]}>
+                      <Icon
+                        source={isMaxStock ? 'alert-circle' : 'package-variant'}
+                        size={10}
+                        color={isMaxStock ? COLORS.orange : COLORS.green}
+                      />
+                      <Text style={[
+                        styles.orderItemStockText,
+                        isMaxStock && styles.orderItemStockTextWarning,
+                      ]}>
+                        {isMaxStock ? 'Max reached' : `${remainingStock} in stock`}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Quantity Controls */}
+                <View style={styles.orderItemControls}>
+                  <TouchableOpacity
+                    style={styles.qtyBtn}
+                    onPress={() => {
+                      if (item.cartQty > 1) {
+                        updateQuantity(item.id, item.cartQty - 1);
+                      } else {
+                        removeFromCart(item.id);
+                      }
+                    }}>
+                    <Icon
+                      source={item.cartQty === 1 ? 'trash-can-outline' : 'minus'}
+                      size={16}
+                      color={item.cartQty === 1 ? COLORS.danger : COLORS.white}
+                    />
+                  </TouchableOpacity>
+                  <Text style={styles.qtyText}>{item.cartQty}</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.qtyBtn,
+                      styles.qtyBtnPlus,
+                      isMaxStock && styles.qtyBtnDisabled,
+                    ]}
+                    onPress={() => {
+                      if (isMaxStock) {
+                        Toast.show({
+                          type: 'info',
+                          text1: 'Stock Limit',
+                          text2: `Only ${(item as any).quantity} available in stock`,
+                        });
+                      } else {
+                        updateQuantity(item.id, item.cartQty + 1);
+                      }
+                    }}>
+                    <Icon source="plus" size={16} color={COLORS.white} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Item Total */}
+                <Text style={styles.orderItemTotal}>
+                  ${(item.price * item.cartQty).toFixed(2)}
                 </Text>
               </View>
-              <Text style={styles.orderItemPrice}>
-                ${(item.price * item.cartQty).toFixed(2)}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
+        </View>
 
-          <View style={styles.divider} />
-
+        {/* Calculations Card */}
+        <View style={styles.calculationsCard}>
           {/* Subtotal */}
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Subtotal</Text>
-            <Text style={styles.summaryValue}>${getSubtotal().toFixed(2)}</Text>
+          <View style={styles.calcRow}>
+            <View style={styles.calcLabelRow}>
+              <Icon source="receipt" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.calcLabel}>Subtotal</Text>
+            </View>
+            <Text style={styles.calcValue}>${getSubtotal().toFixed(2)}</Text>
           </View>
+        </View>
 
-          {/* Tax */}
+        {/* Tax Settings - Inline */}
+        <View style={styles.taxSettingsInline}>
+          <TouchableOpacity
+            style={styles.taxToggleInline}
+            onPress={() => setTaxEnabled(!taxEnabled)}
+            activeOpacity={0.7}>
+            <View style={styles.taxToggleLeft}>
+              <View style={[styles.taxIconContainer, taxEnabled && styles.taxIconContainerActive]}>
+                <Icon source="percent" size={18} color={taxEnabled ? COLORS.orange : COLORS.textMuted} />
+              </View>
+              <View>
+                <Text style={styles.taxToggleTitle}>Sales Tax</Text>
+                <Text style={styles.taxToggleSubtitle}>
+                  {taxEnabled ? `${taxRate}% applied` : 'Tap to enable'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.taxToggleRight}>
+              {taxEnabled && (
+                <Text style={styles.taxAmountPreview}>+${calculateTax().toFixed(2)}</Text>
+              )}
+              <View style={[styles.taxToggleSwitch, taxEnabled && styles.taxToggleSwitchActive]}>
+                <View style={[styles.taxToggleKnob, taxEnabled && styles.taxToggleKnobActive]} />
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* Tax Rate Selector */}
           {taxEnabled && (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tax ({taxRate}%)</Text>
-              <Text style={styles.summaryValue}>${calculateTax().toFixed(2)}</Text>
+            <View style={styles.taxRateSelector}>
+              {/* Fine-tune Adjustment */}
+              <View style={styles.taxAdjustContainerFirst}>
+                <Text style={styles.taxAdjustLabel}>Fine-tune</Text>
+                <View style={styles.taxAdjustRow}>
+                  {/* Decrease buttons */}
+                  <TouchableOpacity
+                    style={[styles.taxAdjustBtn, taxRate <= 0 && styles.taxAdjustBtnDisabled]}
+                    onPress={() => setTaxRate(Math.max(0, taxRate - 5))}
+                    disabled={taxRate <= 0}>
+                    <Text style={[styles.taxAdjustBtnText, taxRate <= 0 && styles.taxAdjustBtnTextDisabled]}>-5</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.taxAdjustBtn, taxRate <= 0 && styles.taxAdjustBtnDisabled]}
+                    onPress={() => setTaxRate(Math.max(0, taxRate - 1))}
+                    disabled={taxRate <= 0}>
+                    <Text style={[styles.taxAdjustBtnText, taxRate <= 0 && styles.taxAdjustBtnTextDisabled]}>-1</Text>
+                  </TouchableOpacity>
+
+                  {/* Current Value Display */}
+                  <View style={styles.taxCurrentValue}>
+                    <Text style={styles.taxCurrentValueText}>{taxRate}%</Text>
+                  </View>
+
+                  {/* Increase buttons */}
+                  <TouchableOpacity
+                    style={[styles.taxAdjustBtn, styles.taxAdjustBtnPlus, taxRate >= 100 && styles.taxAdjustBtnDisabled]}
+                    onPress={() => setTaxRate(Math.min(100, taxRate + 1))}
+                    disabled={taxRate >= 100}>
+                    <Text style={[styles.taxAdjustBtnText, styles.taxAdjustBtnTextPlus, taxRate >= 100 && styles.taxAdjustBtnTextDisabled]}>+1</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.taxAdjustBtn, styles.taxAdjustBtnPlus, taxRate >= 100 && styles.taxAdjustBtnDisabled]}
+                    onPress={() => setTaxRate(Math.min(100, taxRate + 5))}
+                    disabled={taxRate >= 100}>
+                    <Text style={[styles.taxAdjustBtnText, styles.taxAdjustBtnTextPlus, taxRate >= 100 && styles.taxAdjustBtnTextDisabled]}>+5</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Suggested Nearby Rates */}
+              {![5, 10, 15, 18, 20].includes(taxRate) && (
+                <View style={styles.suggestedRatesContainer}>
+                  <Text style={styles.suggestedRatesLabel}>Suggested</Text>
+                  <View style={styles.suggestedRatesRow}>
+                    {[
+                      Math.max(0, Math.floor(taxRate / 5) * 5),
+                      Math.min(100, Math.ceil(taxRate / 5) * 5),
+                    ]
+                      .filter((v, i, a) => a.indexOf(v) === i && v !== taxRate)
+                      .slice(0, 3)
+                      .map(rate => (
+                        <TouchableOpacity
+                          key={rate}
+                          style={styles.suggestedRateBtn}
+                          onPress={() => setTaxRate(rate)}>
+                          <Text style={styles.suggestedRateBtnText}>{rate}%</Text>
+                        </TouchableOpacity>
+                      ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Custom Rate Slider */}
+              <View style={styles.customRateContainer}>
+                <View style={styles.sliderLabelRow}>
+                  <Text style={styles.customRateLabel}>Slider</Text>
+                  <Text style={styles.sliderRangeLabel}>0% - 100%</Text>
+                </View>
+                <Slider
+                  style={styles.taxSliderInline}
+                  minimumValue={0}
+                  maximumValue={100}
+                  step={1}
+                  value={taxRate}
+                  onValueChange={setTaxRate}
+                  minimumTrackTintColor={COLORS.orange}
+                  maximumTrackTintColor={COLORS.inputBg}
+                  thumbTintColor={COLORS.orange}
+                />
+              </View>
             </View>
           )}
+        </View>
 
-          <View style={styles.divider} />
-
-          {/* Total */}
-          <View style={styles.summaryRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${calculateTotal().toFixed(2)}</Text>
+        {/* Total Card */}
+        <View style={styles.totalCard}>
+          <View style={styles.totalCardLeft}>
+            <Text style={styles.totalCardLabel}>Total</Text>
+            {taxEnabled && (
+              <Text style={styles.totalCardSubtext}>
+                Includes ${calculateTax().toFixed(2)} tax
+              </Text>
+            )}
           </View>
+          <Text style={styles.totalCardValue}>${calculateTotal().toFixed(2)}</Text>
         </View>
 
         {/* Payment Methods */}
@@ -954,48 +1275,6 @@ const CheckoutScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Tax Settings */}
-        <Text style={styles.sectionTitle}>Tax Settings</Text>
-        <View style={styles.taxSettings}>
-          <View style={styles.taxToggleRow}>
-            <View style={styles.taxToggleInfo}>
-              <Icon source="percent" size={20} color={COLORS.orange} />
-              <Text style={styles.taxToggleLabel}>Enable Sales Tax</Text>
-            </View>
-            <Switch
-              style={styles.taxSwitch}
-              value={taxEnabled}
-              onValueChange={setTaxEnabled}
-              trackColor={{false: COLORS.inputBg, true: COLORS.purple + '80'}}
-              thumbColor={taxEnabled ? COLORS.purple : COLORS.textMuted}
-            />
-          </View>
-
-          {taxEnabled && (
-            <View style={styles.taxSliderContainer}>
-              <View style={styles.taxSliderHeader}>
-                <Text style={styles.taxSliderLabel}>Tax Rate</Text>
-                <Text style={styles.taxSliderValue}>{taxRate}%</Text>
-              </View>
-              <Slider
-                style={styles.taxSlider}
-                minimumValue={0}
-                maximumValue={100}
-                step={1}
-                value={taxRate}
-                onValueChange={setTaxRate}
-                minimumTrackTintColor={COLORS.purple}
-                maximumTrackTintColor={COLORS.inputBg}
-                thumbTintColor={COLORS.purple}
-              />
-              <View style={styles.taxSliderLabels}>
-                <Text style={styles.taxSliderMinMax}>0%</Text>
-                <Text style={styles.taxSliderMinMax}>100%</Text>
-              </View>
-            </View>
-          )}
-        </View>
-
         {/* Transaction Notes */}
         <Text style={styles.sectionTitle}>Transaction Note</Text>
         <View style={styles.notesSection}>
@@ -1037,204 +1316,334 @@ const CheckoutScreen: React.FC = () => {
       </ScrollView>
 
       {/* New Customer Modal */}
-      <Modal
+      <DraggableBottomSheet
         visible={showNewCustomerModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowNewCustomerModal(false)}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowNewCustomerModal(false)}>
-                <Icon source="close" size={20} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>New Customer</Text>
-              <View style={styles.modalCloseButton} />
+        onClose={() => setShowNewCustomerModal(false)}
+        minHeight="60%"
+        maxHeight="85%"
+        avoidKeyboard>
+        {/* Modal Header */}
+        <View style={styles.modalHeader}>
+          <View style={styles.modalHeaderLeft}>
+            <View style={styles.modalHeaderIcon}>
+              <Icon source="account-plus" size={20} color={COLORS.green} />
             </View>
-
-            {/* Form */}
-            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-              {/* Name Row */}
-              <View style={styles.formRow}>
-                <View style={styles.formHalf}>
-                  <Text style={styles.formLabel}>First Name <Text style={styles.requiredStar}>*</Text></Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="First Name"
-                    placeholderTextColor={COLORS.textMuted}
-                    value={newCustomerForm.first_name}
-                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, first_name: v})}
-                  />
-                </View>
-                <View style={styles.formHalf}>
-                  <Text style={styles.formLabel}>Last Name <Text style={styles.requiredStar}>*</Text></Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="Last Name"
-                    placeholderTextColor={COLORS.textMuted}
-                    value={newCustomerForm.last_name}
-                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, last_name: v})}
-                  />
-                </View>
-              </View>
-
-              {/* Email & Phone Row */}
-              <View style={styles.formRow}>
-                <View style={styles.formHalf}>
-                  <Text style={styles.formLabel}>Email <Text style={styles.requiredStar}>*</Text></Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="Email"
-                    placeholderTextColor={COLORS.textMuted}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={newCustomerForm.email}
-                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, email: v})}
-                  />
-                </View>
-                <View style={styles.formHalf}>
-                  <Text style={styles.formLabel}>Phone Number</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="Phone Number"
-                    placeholderTextColor={COLORS.textMuted}
-                    keyboardType="phone-pad"
-                    value={newCustomerForm.phone}
-                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, phone: v})}
-                  />
-                </View>
-              </View>
-
-              {/* Customer Notes */}
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Customer Notes</Text>
-                <TextInput
-                  style={[styles.formInput, styles.formTextArea]}
-                  placeholder="Add notes about this customer (will be saved with customer record)"
-                  placeholderTextColor={COLORS.textMuted}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                  value={newCustomerForm.note}
-                  onChangeText={(v) => setNewCustomerForm({...newCustomerForm, note: v})}
-                />
-              </View>
-            </ScrollView>
-
-            {/* Save Button */}
-            <TouchableOpacity
-              style={styles.saveCustomerButton}
-              onPress={handleSaveNewCustomer}>
-              <Icon source="content-save" size={20} color={COLORS.white} />
-              <Text style={styles.saveCustomerButtonText}>Save Customer</Text>
-            </TouchableOpacity>
+            <Text style={styles.modalTitle}>New Customer</Text>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setShowNewCustomerModal(false)}>
+            <Icon source="close" size={20} color={COLORS.white} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Form */}
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          {/* Name Row */}
+          <View style={styles.formRow}>
+            <View style={styles.formHalf}>
+              <Text style={styles.formLabel}>First Name <Text style={styles.requiredStar}>*</Text></Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="First Name"
+                placeholderTextColor={COLORS.textMuted}
+                value={newCustomerForm.first_name}
+                onChangeText={(v) => setNewCustomerForm({...newCustomerForm, first_name: v})}
+              />
+            </View>
+            <View style={styles.formHalf}>
+              <Text style={styles.formLabel}>Last Name <Text style={styles.requiredStar}>*</Text></Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Last Name"
+                placeholderTextColor={COLORS.textMuted}
+                value={newCustomerForm.last_name}
+                onChangeText={(v) => setNewCustomerForm({...newCustomerForm, last_name: v})}
+              />
+            </View>
+          </View>
+
+          {/* Email & Phone Row */}
+          <View style={styles.formRow}>
+            <View style={styles.formHalf}>
+              <Text style={styles.formLabel}>Email <Text style={styles.requiredStar}>*</Text></Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Email"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={newCustomerForm.email}
+                onChangeText={(v) => setNewCustomerForm({...newCustomerForm, email: v})}
+              />
+            </View>
+            <View style={styles.formHalf}>
+              <Text style={styles.formLabel}>Phone Number</Text>
+              <TextInput
+                style={styles.formInput}
+                placeholder="Phone Number"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="phone-pad"
+                value={newCustomerForm.phone}
+                onChangeText={(v) => setNewCustomerForm({...newCustomerForm, phone: v})}
+              />
+            </View>
+          </View>
+
+          {/* Customer Notes */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>Customer Notes</Text>
+            <TextInput
+              style={[styles.formInput, styles.formTextArea]}
+              placeholder="Add notes about this customer (will be saved with customer record)"
+              placeholderTextColor={COLORS.textMuted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              value={newCustomerForm.note}
+              onChangeText={(v) => setNewCustomerForm({...newCustomerForm, note: v})}
+            />
+          </View>
+        </ScrollView>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={styles.saveCustomerButton}
+          onPress={handleSaveNewCustomer}>
+          <Icon source="content-save" size={20} color={COLORS.white} />
+          <Text style={styles.saveCustomerButtonText}>Save Customer</Text>
+        </TouchableOpacity>
+      </DraggableBottomSheet>
 
       {/* Customer Selection Modal */}
-      <Modal
+      <DraggableBottomSheet
         visible={showCustomerModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCustomerModal(false)}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}>
-          <View style={styles.customerModalContainer}>
-            {/* Modal Header */}
-            <View style={styles.customerModalHeader}>
-              <View style={styles.customerModalHeaderLeft}>
-                <View style={styles.customerModalHeaderIcon}>
-                  <Icon source="account-group" size={20} color={COLORS.purple} />
-                </View>
-                <Text style={styles.customerModalHeaderTitle}>Select Customer</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowCustomerModal(false)}>
-                <Icon source="close" size={20} color={COLORS.white} />
-              </TouchableOpacity>
+        onClose={() => setShowCustomerModal(false)}
+        minHeight="70%"
+        maxHeight="80%"
+        avoidKeyboard>
+        {/* Modal Header */}
+        <View style={styles.customerModalHeader}>
+          <View style={styles.customerModalHeaderLeft}>
+            <View style={styles.customerModalHeaderIcon}>
+              <Icon source="account-group" size={20} color={COLORS.purple} />
             </View>
+            <Text style={styles.customerModalHeaderTitle}>Select Customer</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setShowCustomerModal(false)}>
+            <Icon source="close" size={20} color={COLORS.white} />
+          </TouchableOpacity>
+        </View>
 
-            {/* Search Input */}
-            <View style={styles.customerModalSearch}>
-              <View style={styles.searchInputContainer}>
-                <Icon source="magnify" size={20} color={COLORS.textMuted} />
+        {/* Search Input */}
+        <View style={styles.customerModalSearch}>
+          <View style={styles.searchInputContainer}>
+            <Icon source="magnify" size={20} color={COLORS.textMuted} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by name, email, phone..."
+              placeholderTextColor={COLORS.textMuted}
+              value={customerSearch}
+              onChangeText={handleCustomerSearch}
+              autoFocus
+            />
+            {isSearchingCustomer && (
+              <ActivityIndicator size="small" color={COLORS.purple} />
+            )}
+          </View>
+        </View>
+
+        {/* Search Results */}
+        <ScrollView style={styles.customerModalResults} showsVerticalScrollIndicator={false}>
+          {showCustomerResults && customerResults.length > 0 && (
+            <View style={styles.customerResultsList}>
+              {customerResults.map(customer => (
+                <TouchableOpacity
+                  key={customer.id}
+                  style={styles.customerResultItem}
+                  onPress={() => {
+                    handleSelectCustomer(customer);
+                    setShowCustomerModal(false);
+                  }}>
+                  <View style={styles.customerResultIcon}>
+                    <Icon source="account" size={24} color={COLORS.purple} />
+                  </View>
+                  <View style={styles.customerResultInfo}>
+                    <Text style={styles.customerResultName}>{customer.name}</Text>
+                    <Text style={styles.customerResultEmail}>{customer.email}</Text>
+                  </View>
+                  <Icon source="chevron-right" size={20} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {showCustomerResults && customerResults.length === 0 && !isSearchingCustomer && customerSearch.length >= 2 && (
+            <View style={styles.noResultsContainer}>
+              <Icon source="account-search" size={48} color={COLORS.textMuted} />
+              <Text style={styles.noResultsTitle}>No customers found</Text>
+              <Text style={styles.noResultsSubtitle}>Try a different search term or add a new customer</Text>
+            </View>
+          )}
+          {!showCustomerResults && (
+            <View style={styles.searchHintContainer}>
+              <Icon source="account-search" size={48} color={COLORS.textMuted} />
+              <Text style={styles.searchHintText}>Search for an existing customer</Text>
+              <Text style={styles.searchHintSubtext}>Enter name, email, or phone number</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Add New Customer Button */}
+        <View style={styles.customerModalFooter}>
+          <TouchableOpacity
+            style={styles.addNewCustomerButtonModal}
+            onPress={() => {
+              setShowCustomerModal(false);
+              setShowNewCustomerModal(true);
+            }}>
+            <Icon source="plus" size={20} color={COLORS.white} />
+            <Text style={styles.addNewCustomerText}>Add New Customer</Text>
+          </TouchableOpacity>
+        </View>
+      </DraggableBottomSheet>
+
+      {/* Custom Product Modal */}
+      <DraggableBottomSheet
+        visible={showCustomProductModal}
+        onClose={() => setShowCustomProductModal(false)}
+        minHeight="55%"
+        maxHeight="75%"
+        avoidKeyboard>
+        {/* Modal Header */}
+        <View style={styles.modalHeader}>
+          <View style={styles.modalHeaderLeft}>
+            <View style={[styles.modalHeaderIcon, styles.modalHeaderIconOrange]}>
+              <Icon source="plus-box" size={20} color={COLORS.orange} />
+            </View>
+            <Text style={styles.modalTitle}>Custom Product</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setShowCustomProductModal(false)}>
+            <Icon source="close" size={20} color={COLORS.white} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Form */}
+        <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+          {/* Product Name */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>Product Name <Text style={styles.requiredStar}>*</Text></Text>
+            <TextInput
+              style={styles.formInput}
+              placeholder="Enter product name"
+              placeholderTextColor={COLORS.textMuted}
+              value={customProductForm.name}
+              onChangeText={(v) => setCustomProductForm({...customProductForm, name: v})}
+            />
+          </View>
+
+          {/* Cost & Price Row */}
+          <View style={styles.formRow}>
+            <View style={styles.formHalf}>
+              <Text style={styles.formLabel}>Cost</Text>
+              <View style={styles.currencyInputContainer}>
+                <Text style={styles.currencyPrefix}>$</Text>
                 <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search by name, email, phone..."
+                  style={styles.currencyInput}
+                  placeholder="0.00"
                   placeholderTextColor={COLORS.textMuted}
-                  value={customerSearch}
-                  onChangeText={handleCustomerSearch}
-                  autoFocus
+                  keyboardType="decimal-pad"
+                  value={customProductForm.cost}
+                  onChangeText={(v) => setCustomProductForm({...customProductForm, cost: v})}
                 />
-                {isSearchingCustomer && (
-                  <ActivityIndicator size="small" color={COLORS.purple} />
-                )}
               </View>
             </View>
+            <View style={styles.formHalf}>
+              <Text style={styles.formLabel}>Price <Text style={styles.requiredStar}>*</Text></Text>
+              <View style={styles.currencyInputContainer}>
+                <Text style={styles.currencyPrefix}>$</Text>
+                <TextInput
+                  style={styles.currencyInput}
+                  placeholder="0.00"
+                  placeholderTextColor={COLORS.textMuted}
+                  keyboardType="decimal-pad"
+                  value={customProductForm.price}
+                  onChangeText={(v) => setCustomProductForm({...customProductForm, price: v})}
+                />
+              </View>
+            </View>
+          </View>
 
-            {/* Search Results */}
-            <ScrollView style={styles.customerModalResults} showsVerticalScrollIndicator={false}>
-              {showCustomerResults && customerResults.length > 0 && (
-                <View style={styles.customerResultsList}>
-                  {customerResults.map(customer => (
-                    <TouchableOpacity
-                      key={customer.id}
-                      style={styles.customerResultItem}
-                      onPress={() => {
-                        handleSelectCustomer(customer);
-                        setShowCustomerModal(false);
-                      }}>
-                      <View style={styles.customerResultIcon}>
-                        <Icon source="account" size={24} color={COLORS.purple} />
-                      </View>
-                      <View style={styles.customerResultInfo}>
-                        <Text style={styles.customerResultName}>{customer.name}</Text>
-                        <Text style={styles.customerResultEmail}>{customer.email}</Text>
-                      </View>
-                      <Icon source="chevron-right" size={20} color={COLORS.textMuted} />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              {showCustomerResults && customerResults.length === 0 && !isSearchingCustomer && customerSearch.length >= 2 && (
-                <View style={styles.noResultsContainer}>
-                  <Icon source="account-search" size={48} color={COLORS.textMuted} />
-                  <Text style={styles.noResultsTitle}>No customers found</Text>
-                  <Text style={styles.noResultsSubtitle}>Try a different search term or add a new customer</Text>
-                </View>
-              )}
-              {!showCustomerResults && (
-                <View style={styles.searchHintContainer}>
-                  <Icon source="account-search" size={48} color={COLORS.textMuted} />
-                  <Text style={styles.searchHintText}>Search for an existing customer</Text>
-                  <Text style={styles.searchHintSubtext}>Enter name, email, or phone number</Text>
-                </View>
-              )}
-            </ScrollView>
-
-            {/* Add New Customer Button */}
-            <View style={styles.customerModalFooter}>
+          {/* Quantity */}
+          <View style={styles.formGroup}>
+            <Text style={styles.formLabel}>Quantity</Text>
+            <View style={styles.quantityInputRow}>
               <TouchableOpacity
-                style={styles.addNewCustomerButtonModal}
+                style={styles.quantityInputBtn}
                 onPress={() => {
-                  setShowCustomerModal(false);
-                  setShowNewCustomerModal(true);
+                  const qty = Math.max(1, parseInt(customProductForm.quantity) - 1 || 1);
+                  setCustomProductForm({...customProductForm, quantity: qty.toString()});
                 }}>
-                <Icon source="plus" size={20} color={COLORS.white} />
-                <Text style={styles.addNewCustomerText}>Add New Customer</Text>
+                <Icon source="minus" size={18} color={COLORS.white} />
+              </TouchableOpacity>
+              <TextInput
+                style={styles.quantityInputField}
+                placeholder="1"
+                placeholderTextColor={COLORS.textMuted}
+                keyboardType="number-pad"
+                value={customProductForm.quantity}
+                onChangeText={(v) => setCustomProductForm({...customProductForm, quantity: v})}
+              />
+              <TouchableOpacity
+                style={[styles.quantityInputBtn, styles.quantityInputBtnPlus]}
+                onPress={() => {
+                  const qty = (parseInt(customProductForm.quantity) || 0) + 1;
+                  setCustomProductForm({...customProductForm, quantity: qty.toString()});
+                }}>
+                <Icon source="plus" size={18} color={COLORS.white} />
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+
+          {/* Preview */}
+          {customProductForm.name && customProductForm.price && (
+            <View style={styles.customProductPreview}>
+              <View style={styles.previewHeader}>
+                <Icon source="eye" size={16} color={COLORS.textSecondary} />
+                <Text style={styles.previewTitle}>Preview</Text>
+              </View>
+              <View style={styles.previewContent}>
+                <Text style={styles.previewName}>{customProductForm.name}</Text>
+                <View style={styles.previewRow}>
+                  <Text style={styles.previewLabel}>Price:</Text>
+                  <Text style={styles.previewValue}>${parseFloat(customProductForm.price || '0').toFixed(2)}</Text>
+                </View>
+                <View style={styles.previewRow}>
+                  <Text style={styles.previewLabel}>Qty:</Text>
+                  <Text style={styles.previewValue}>{customProductForm.quantity || '1'}</Text>
+                </View>
+                <View style={[styles.previewRow, styles.previewRowTotal]}>
+                  <Text style={styles.previewLabelTotal}>Total:</Text>
+                  <Text style={styles.previewValueTotal}>
+                    ${(parseFloat(customProductForm.price || '0') * (parseInt(customProductForm.quantity) || 1)).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={styles.saveCustomProductButton}
+          onPress={handleSaveCustomProduct}>
+          <Icon source="plus-circle" size={20} color={COLORS.white} />
+          <Text style={styles.saveCustomProductButtonText}>Add to Cart</Text>
+        </TouchableOpacity>
+      </DraggableBottomSheet>
     </SafeAreaView>
   );
 };
@@ -1293,122 +1702,369 @@ const styles = StyleSheet.create({
     color: COLORS.danger,
     fontWeight: '700',
   },
-  orderSummary: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 12,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-  },
-  orderItem: {
+  // Order Summary Header
+  orderSummaryHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.sm,
   },
-  orderItemLeft: {
+  orderSummaryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  itemCountBadge: {
+    backgroundColor: COLORS.purple + '20',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+  },
+  itemCountText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.purple,
+  },
+  // Order Items Container
+  orderItemsContainer: {
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  orderItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  orderItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.cardBgPurple,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderItemInfo: {
     flex: 1,
   },
   orderItemName: {
     fontSize: 14,
     fontWeight: '500',
     color: COLORS.white,
-  },
-  orderItemQty: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 1,
+    flex: 1,
+    flexShrink: 1,
   },
   orderItemPrice: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  orderItemStockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.xs,
+    backgroundColor: COLORS.green + '15',
+    alignSelf: 'flex-start',
+  },
+  orderItemStockBadgeWarning: {
+    backgroundColor: COLORS.orange + '15',
+  },
+  orderItemStockText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.green,
+  },
+  orderItemStockTextWarning: {
+    color: COLORS.orange,
+  },
+  orderItemControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.inputBg,
+    borderRadius: RADIUS.sm,
+    padding: 2,
+  },
+  qtyBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: RADIUS.xs,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qtyBtnPlus: {
+    backgroundColor: COLORS.purple,
+  },
+  qtyBtnDisabled: {
+    backgroundColor: COLORS.textMuted,
+    opacity: 0.5,
+  },
+  qtyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.white,
+    minWidth: 28,
+    textAlign: 'center',
+  },
+  orderItemTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.green,
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  // Calculations Card
+  calculationsCard: {
+    backgroundColor: COLORS.cardBgPurple,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  calcRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: SPACING.xs,
+  },
+  calcLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  calcLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  calcValue: {
+    fontSize: 14,
+    color: COLORS.white,
+  },
+  // Total Card
+  totalCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.green,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    ...SHADOWS.greenGlow,
+  },
+  totalCardLeft: {
+    flex: 1,
+  },
+  totalCardLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  totalCardSubtext: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  totalCardValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  // Inline Tax Settings Styles
+  taxSettingsInline: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.md,
+    marginBottom: SPACING.sm,
+    overflow: 'hidden',
+  },
+  taxToggleInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+  },
+  taxToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  taxIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taxIconContainerActive: {
+    backgroundColor: COLORS.orange + '20',
+  },
+  taxToggleTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.white,
   },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: SPACING.sm,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 2,
-  },
-  summaryLabel: {
-    fontSize: 13,
+  taxToggleSubtitle: {
+    fontSize: 12,
     color: COLORS.textSecondary,
+    marginTop: 1,
   },
-  summaryValue: {
-    fontSize: 13,
-    color: COLORS.white,
+  taxToggleRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
-  totalLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.white,
+  taxAmountPreview: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.orange,
   },
-  totalValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.green,
-  },
-  taxSettings: {
-    backgroundColor: COLORS.cardBg,
+  taxToggleSwitch: {
+    width: 44,
+    height: 24,
     borderRadius: 12,
-    paddingVertical: SPACING.md,
+    backgroundColor: COLORS.inputBg,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  taxToggleSwitchActive: {
+    backgroundColor: COLORS.orange,
+  },
+  taxToggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.textMuted,
+  },
+  taxToggleKnobActive: {
+    backgroundColor: COLORS.white,
+    alignSelf: 'flex-end',
+  },
+  taxRateSelector: {
     paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: SPACING.sm,
   },
-  taxToggleRow: {
+  // Tax Adjustment Controls
+  taxAdjustContainerFirst: {
+    // No border/margin when it's the first element
+  },
+  taxAdjustContainer: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  taxAdjustLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+  },
+  taxAdjustRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  taxToggleInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'center',
     gap: SPACING.xs,
   },
-  taxToggleLabel: {
+  taxAdjustBtn: {
+    width: 44,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taxAdjustBtnPlus: {
+    backgroundColor: COLORS.orange + '20',
+  },
+  taxAdjustBtnDisabled: {
+    opacity: 0.4,
+  },
+  taxAdjustBtnText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  taxAdjustBtnTextPlus: {
+    color: COLORS.orange,
+  },
+  taxAdjustBtnTextDisabled: {
+    color: COLORS.textMuted,
+  },
+  taxCurrentValue: {
+    minWidth: 70,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: SPACING.sm,
+  },
+  taxCurrentValueText: {
+    fontSize: 18,
+    fontWeight: '700',
     color: COLORS.white,
   },
-  taxSwitch: {
-    transform: [{scaleX: 1.1}, {scaleY: 1.1}],
-  },
-  taxSliderContainer: {
+  // Suggested Rates
+  suggestedRatesContainer: {
     marginTop: SPACING.sm,
     paddingTop: SPACING.sm,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
-  taxSliderHeader: {
+  suggestedRatesLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  suggestedRatesRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  suggestedRateBtn: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.purple + '20',
+    borderWidth: 1,
+    borderColor: COLORS.purple,
+  },
+  suggestedRateBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.purple,
+  },
+  // Custom Slider
+  customRateContainer: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  sliderLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: SPACING.xs,
   },
-  taxSliderLabel: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
+  customRateLabel: {
+    fontSize: 12,
+    color: COLORS.textMuted,
   },
-  taxSliderValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.purple,
-  },
-  taxSlider: {
-    width: '100%',
-    height: 32,
-  },
-  taxSliderLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: -4,
-  },
-  taxSliderMinMax: {
+  sliderRangeLabel: {
     fontSize: 11,
     color: COLORS.textMuted,
+  },
+  taxSliderInline: {
+    width: '100%',
+    height: 28,
   },
   paymentSection: {
     backgroundColor: COLORS.cardBg,
@@ -1619,9 +2275,7 @@ const styles = StyleSheet.create({
   },
   // Customer section styles
   customerSection: {
-    backgroundColor: COLORS.cardBg,
     borderRadius: 12,
-    padding: SPACING.md,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -1630,6 +2284,9 @@ const styles = StyleSheet.create({
   },
   selectedCustomer: {
     flex: 1,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
   },
   customerHeader: {
     flexDirection: 'row',
@@ -1728,9 +2385,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.cardBg,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     padding: SPACING.md,
     gap: SPACING.md,
+    ...SHADOWS.small,
   },
   customerResultInfo: {
     flex: 1,
@@ -1893,30 +2551,32 @@ const styles = StyleSheet.create({
     minHeight: 80,
   },
   // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContainer: {
-    backgroundColor: COLORS.darkBg,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
-  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  modalHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.green + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalCloseButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: RADIUS.full,
     backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1963,11 +2623,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.green,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     paddingVertical: SPACING.md,
     marginHorizontal: SPACING.md,
     marginBottom: SPACING.lg,
     gap: SPACING.xs,
+    ...SHADOWS.greenGlow,
   },
   saveCustomerButtonText: {
     fontSize: 16,
@@ -1978,17 +2639,16 @@ const styles = StyleSheet.create({
   selectCustomerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
+    backgroundColor: COLORS.green,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    ...SHADOWS.greenGlow,
   },
   selectCustomerIcon: {
     width: 50,
     height: 50,
-    borderRadius: 14,
-    backgroundColor: COLORS.purple,
+    borderRadius: RADIUS.lg,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2003,22 +2663,16 @@ const styles = StyleSheet.create({
   },
   selectCustomerSubtitle: {
     fontSize: 13,
-    color: COLORS.textSecondary,
+    color: 'rgba(255, 255, 255, 0.8)',
     marginTop: 2,
   },
   // Customer Selection Modal styles
-  customerModalContainer: {
-    backgroundColor: COLORS.darkBg,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    height: '80%',
-  },
   customerModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
@@ -2030,7 +2684,7 @@ const styles = StyleSheet.create({
   customerModalHeaderIcon: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: RADIUS.sm,
     backgroundColor: COLORS.purple + '20',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2105,9 +2759,183 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.green,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     paddingVertical: SPACING.md,
     gap: SPACING.xs,
+    ...SHADOWS.greenGlow,
+  },
+  // Custom Product Styles
+  orderItemIconCustom: {
+    backgroundColor: COLORS.orange + '20',
+  },
+  customProductBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.xs,
+    backgroundColor: COLORS.orange + '15',
+    alignSelf: 'flex-start',
+  },
+  customProductBadgeText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.orange,
+  },
+  addCustomProductCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryBg,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginTop: SPACING.md,
+  },
+  addCustomProductIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: RADIUS.lg,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addCustomProductContent: {
+    flex: 1,
+    marginLeft: SPACING.md,
+  },
+  addCustomProductTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  addCustomProductSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  // Custom Product Modal Styles
+  modalHeaderIconOrange: {
+    backgroundColor: COLORS.orange + '20',
+  },
+  currencyInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    paddingHorizontal: SPACING.md,
+  },
+  currencyPrefix: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.green,
+    marginRight: SPACING.xs,
+  },
+  currencyInput: {
+    flex: 1,
+    fontSize: 16,
+    color: COLORS.white,
+    paddingVertical: SPACING.md,
+  },
+  quantityInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  quantityInputBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityInputBtnPlus: {
+    backgroundColor: COLORS.orange,
+  },
+  quantityInputField: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.white,
+    textAlign: 'center',
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+  },
+  customProductPreview: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginTop: SPACING.md,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  previewTitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  previewContent: {
+    gap: SPACING.xs,
+  },
+  previewName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.white,
+    marginBottom: SPACING.xs,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  previewRowTotal: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  previewLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+  previewValue: {
+    fontSize: 13,
+    color: COLORS.white,
+  },
+  previewLabelTotal: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  previewValueTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.green,
+  },
+  saveCustomProductButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.orange,
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
+    gap: SPACING.xs,
+    ...SHADOWS.orangeGlow,
+  },
+  saveCustomProductButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
   },
 });
 

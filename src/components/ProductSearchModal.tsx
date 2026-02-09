@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TextInput,
   TouchableOpacity,
   FlatList,
@@ -11,9 +10,10 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import {Icon} from 'react-native-paper';
-import {COLORS, SPACING} from '@constants/theme';
+import {COLORS, SPACING, RADIUS, SHADOWS} from '@constants/theme';
 import {Product, searchProducts} from '@services/productService';
 import {useCart} from '../context/CartContext';
+import DraggableBottomSheet from './DraggableBottomSheet';
 
 interface ProductSearchModalProps {
   visible: boolean;
@@ -140,98 +140,101 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
   };
 
   return (
-    <Modal
+    <DraggableBottomSheet
       visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={handleClose}>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Search Products</Text>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Icon source="close" size={24} color={COLORS.white} />
-            </TouchableOpacity>
+      onClose={handleClose}
+      minHeight="60%"
+      maxHeight="85%"
+      avoidKeyboard>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <View style={styles.headerIcon}>
+            <Icon source="magnify" size={20} color={COLORS.purple} />
           </View>
-
-          {/* Search Input */}
-          <View style={styles.searchContainer}>
-            <Icon source="magnify" size={20} color={COLORS.textSecondary} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by name or SKU..."
-              placeholderTextColor={COLORS.textSecondary}
-              value={query}
-              onChangeText={handleSearch}
-              autoFocus
-            />
-            {query.length > 0 && (
-              <TouchableOpacity onPress={() => handleSearch('')}>
-                <Icon source="close-circle" size={20} color={COLORS.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Results */}
-          <View style={styles.resultsContainer}>
-            {isLoading ? (
-              <View style={styles.centerContent}>
-                <ActivityIndicator size="large" color={COLORS.purple} />
-                <Text style={styles.loadingText}>Searching...</Text>
-              </View>
-            ) : results.length > 0 ? (
-              <FlatList
-                data={results}
-                keyExtractor={item => item.id.toString()}
-                renderItem={renderProduct}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : hasSearched ? (
-              <View style={styles.centerContent}>
-                <Icon source="magnify-close" size={48} color={COLORS.textMuted} />
-                <Text style={styles.emptyText}>No products found</Text>
-                <Text style={styles.emptySubtext}>
-                  Try a different search term
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.centerContent}>
-                <Icon source="magnify" size={48} color={COLORS.textMuted} />
-                <Text style={styles.emptyText}>Search Products</Text>
-                <Text style={styles.emptySubtext}>
-                  Enter product name or SKU
-                </Text>
-              </View>
-            )}
-          </View>
+          <Text style={styles.title}>Search Products</Text>
         </View>
+        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+          <Icon source="close" size={20} color={COLORS.white} />
+        </TouchableOpacity>
       </View>
-    </Modal>
+
+      {/* Search Input */}
+      <View style={styles.searchContainer}>
+        <Icon source="magnify" size={20} color={COLORS.textSecondary} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name or SKU..."
+          placeholderTextColor={COLORS.textSecondary}
+          value={query}
+          onChangeText={handleSearch}
+          autoFocus
+        />
+        {query.length > 0 && (
+          <TouchableOpacity onPress={() => handleSearch('')}>
+            <Icon source="close-circle" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Results */}
+      <View style={styles.resultsContainer}>
+        {isLoading ? (
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={COLORS.purple} />
+            <Text style={styles.loadingText}>Searching...</Text>
+          </View>
+        ) : results.length > 0 ? (
+          <FlatList
+            data={results}
+            keyExtractor={item => item.id.toString()}
+            renderItem={renderProduct}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : hasSearched ? (
+          <View style={styles.centerContent}>
+            <Icon source="magnify-close" size={48} color={COLORS.textMuted} />
+            <Text style={styles.emptyText}>No products found</Text>
+            <Text style={styles.emptySubtext}>
+              Try a different search term
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.centerContent}>
+            <Icon source="magnify" size={48} color={COLORS.textMuted} />
+            <Text style={styles.emptyText}>Search Products</Text>
+            <Text style={styles.emptySubtext}>
+              Enter product name or SKU
+            </Text>
+          </View>
+        )}
+      </View>
+    </DraggableBottomSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  container: {
-    backgroundColor: COLORS.darkBg,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
-    minHeight: '60%',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  headerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.purple + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 18,
@@ -241,7 +244,7 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: RADIUS.full,
     backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -250,7 +253,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.inputBg,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     margin: SPACING.md,
     paddingHorizontal: SPACING.md,
   },
@@ -291,14 +294,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.cardBg,
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
+    ...SHADOWS.small,
   },
   productIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.purple + '20',
     alignItems: 'center',
     justifyContent: 'center',
@@ -326,10 +330,11 @@ const styles = StyleSheet.create({
   addButton: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: RADIUS.sm,
     backgroundColor: COLORS.purple,
     alignItems: 'center',
     justifyContent: 'center',
+    ...SHADOWS.purpleGlow,
   },
   addButtonDisabled: {
     backgroundColor: COLORS.textMuted,

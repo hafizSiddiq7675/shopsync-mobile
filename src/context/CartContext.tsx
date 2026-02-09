@@ -1,27 +1,51 @@
 import React, {createContext, useContext, useState, useCallback} from 'react';
-import {Product, CartItem} from '@services/productService';
+import {Product, CartItem, CustomCartItem} from '@services/productService';
+
+// Combined cart item type
+export type CombinedCartItem = CartItem | CustomCartItem;
+
+// Custom product form data
+export interface CustomProductForm {
+  name: string;
+  cost: number;
+  price: number;
+  quantity: number;
+}
 
 interface CartContextType {
-  cartItems: CartItem[];
+  cartItems: CombinedCartItem[];
   addToCart: (product: Product) => boolean; // returns false if stock limit reached
-  removeFromCart: (productId: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
+  addCustomProduct: (customProduct: CustomProductForm) => void;
+  removeFromCart: (itemId: number | string) => void;
+  updateQuantity: (itemId: number | string, quantity: number) => void;
+  updateCustomQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
   getSubtotal: () => number;
   getTax: () => number;
   getTotal: () => number;
   getItemCount: () => number;
   canAddMore: (productId: number, availableQty: number) => boolean;
+  isCustomItem: (item: CombinedCartItem) => item is CustomCartItem;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const TAX_RATE = 0.1; // 10% tax
 
+// Type guard for custom items
+const isCustomItem = (item: CombinedCartItem): item is CustomCartItem => {
+  return 'is_custom' in item && item.is_custom === true;
+};
+
+// Get item ID (works for both regular and custom items)
+const getItemId = (item: CombinedCartItem): number | string => {
+  return item.id;
+};
+
 export const CartProvider: React.FC<{children: React.ReactNode}> = ({
   children,
 }) => {
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CombinedCartItem[]>([]);
 
   // Check if can add more of a product
   const canAddMore = useCallback(
@@ -62,24 +86,56 @@ export const CartProvider: React.FC<{children: React.ReactNode}> = ({
     return true;
   }, [cartItems]);
 
-  // Remove product from cart completely
-  const removeFromCart = useCallback((productId: number) => {
-    setCartItems(prevItems => prevItems.filter(item => item.id !== productId));
+  // Add custom product to cart
+  const addCustomProduct = useCallback((customProduct: CustomProductForm) => {
+    const customItem: CustomCartItem = {
+      id: `custom_${Date.now()}`,
+      is_custom: true,
+      name: customProduct.name,
+      cost: customProduct.cost,
+      price: customProduct.price,
+      cartQty: customProduct.quantity,
+    };
+    setCartItems(prevItems => [...prevItems, customItem]);
   }, []);
 
-  // Update quantity for a specific product (limited to available stock)
-  const updateQuantity = useCallback((productId: number, quantity: number) => {
+  // Remove product from cart completely
+  const removeFromCart = useCallback((itemId: number | string) => {
+    setCartItems(prevItems => prevItems.filter(item => item.id !== itemId));
+  }, []);
+
+  // Update quantity for a specific product (limited to available stock for regular items)
+  const updateQuantity = useCallback((itemId: number | string, quantity: number) => {
     if (quantity <= 0) {
       // Remove item if quantity is 0 or less
       setCartItems(prevItems =>
-        prevItems.filter(item => item.id !== productId),
+        prevItems.filter(item => item.id !== itemId),
       );
     } else {
       setCartItems(prevItems =>
+        prevItems.map(item => {
+          if (item.id !== itemId) return item;
+
+          // For custom items, no stock limit
+          if (isCustomItem(item)) {
+            return {...item, cartQty: quantity};
+          }
+
+          // For regular items, limit to available stock
+          return {...item, cartQty: Math.min(quantity, item.quantity)};
+        }),
+      );
+    }
+  }, []);
+
+  // Update quantity for custom product (no stock limit)
+  const updateCustomQuantity = useCallback((itemId: string, quantity: number) => {
+    if (quantity <= 0) {
+      setCartItems(prevItems => prevItems.filter(item => item.id !== itemId));
+    } else {
+      setCartItems(prevItems =>
         prevItems.map(item =>
-          item.id === productId
-            ? {...item, cartQty: Math.min(quantity, item.quantity)} // Limit to available stock
-            : item,
+          item.id === itemId ? {...item, cartQty: quantity} : item,
         ),
       );
     }
@@ -118,14 +174,17 @@ export const CartProvider: React.FC<{children: React.ReactNode}> = ({
       value={{
         cartItems,
         addToCart,
+        addCustomProduct,
         removeFromCart,
         updateQuantity,
+        updateCustomQuantity,
         clearCart,
         getSubtotal,
         getTax,
         getTotal,
         getItemCount,
         canAddMore,
+        isCustomItem,
       }}>
       {children}
     </CartContext.Provider>

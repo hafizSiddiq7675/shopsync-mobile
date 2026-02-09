@@ -12,7 +12,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation, CommonActions, useFocusEffect} from '@react-navigation/native';
 import {Icon} from 'react-native-paper';
 import {AuthUser, Shop} from '@types';
-import {COLORS, SPACING} from '@constants/theme';
+import {COLORS, SPACING, RADIUS, SHADOWS} from '@constants/theme';
 import {authService} from '@services/authService';
 import {getDashboardStats, DashboardStats} from '@services/productService';
 
@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -367,9 +367,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
+    borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
+    ...SHADOWS.medium,
   },
   welcomeContent: {
     flex: 1,
@@ -387,7 +388,7 @@ const styles = StyleSheet.create({
   welcomeIcon: {
     width: 70,
     height: 70,
-    borderRadius: 20,
+    borderRadius: RADIUS.xl,
     backgroundColor: COLORS.purple + '20',
     alignItems: 'center',
     justifyContent: 'center',
@@ -407,14 +408,15 @@ const styles = StyleSheet.create({
   statCard: {
     width: '48%',
     backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
     alignItems: 'center',
+    ...SHADOWS.small,
   },
   statIconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 14,
+    borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.sm,
@@ -437,13 +439,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
+    ...SHADOWS.medium,
   },
   actionIconWrapper: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -463,21 +466,22 @@ const styles = StyleSheet.create({
   },
   moreOptions: {
     backgroundColor: COLORS.cardBg,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     overflow: 'hidden',
     marginBottom: SPACING.lg,
+    ...SHADOWS.small,
   },
   optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#2A2A4A',
+    borderBottomColor: COLORS.border,
   },
   optionIcon: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
@@ -11,9 +10,10 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import {Icon} from 'react-native-paper';
-import {COLORS, SPACING} from '@constants/theme';
+import {COLORS, SPACING, RADIUS, SHADOWS} from '@constants/theme';
 import {Product, getRecentProducts} from '@services/productService';
 import {useCart} from '../context/CartContext';
+import DraggableBottomSheet from './DraggableBottomSheet';
 
 interface RecentProductsModalProps {
   visible: boolean;
@@ -105,17 +105,6 @@ const RecentProductsModal: React.FC<RecentProductsModalProps> = ({
       // Remove if quantity would be 0
       removeFromCart(product.id);
     }
-  };
-
-  // Handle remove from cart
-  const handleRemove = (product: Product) => {
-    removeFromCart(product.id);
-    Toast.show({
-      type: 'info',
-      text1: 'Removed',
-      text2: `${product.name} removed from cart`,
-      visibilityTime: 1500,
-    });
   };
 
   // Handle close
@@ -221,88 +210,72 @@ const RecentProductsModal: React.FC<RecentProductsModalProps> = ({
   };
 
   return (
-    <Modal
+    <DraggableBottomSheet
       visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={handleClose}>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.headerIcon}>
-                <Icon source="history" size={18} color={COLORS.orange} />
-              </View>
-              <View>
-                <Text style={styles.title}>Recently Sold</Text>
-                <Text style={styles.subtitle}>
-                  {cartItems.length > 0
-                    ? `${cartItems.length} item${cartItems.length > 1 ? 's' : ''} in cart`
-                    : 'Tap to quick-add'}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Icon source="close" size={18} color={COLORS.white} />
-            </TouchableOpacity>
+      onClose={handleClose}
+      minHeight="70%"
+      maxHeight="85%">
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <View style={styles.headerIcon}>
+            <Icon source="history" size={18} color={COLORS.orange} />
           </View>
-
-          {/* Content */}
-          <View style={styles.content}>
-            {isLoading ? (
-              <View style={styles.centerContent}>
-                <ActivityIndicator size="large" color={COLORS.orange} />
-                <Text style={styles.loadingText}>Loading...</Text>
-              </View>
-            ) : products.length > 0 ? (
-              <FlatList
-                data={products}
-                keyExtractor={item => item.id.toString()}
-                renderItem={renderProductItem}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.listContent}
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={handleRefresh}
-                    tintColor={COLORS.orange}
-                    colors={[COLORS.orange]}
-                  />
-                }
-              />
-            ) : (
-              <View style={styles.centerContent}>
-                <View style={styles.emptyIcon}>
-                  <Icon source="history" size={28} color={COLORS.textMuted} />
-                </View>
-                <Text style={styles.emptyText}>No Recent Products</Text>
-                <Text style={styles.emptySubtext}>
-                  Products you sell will appear here
-                </Text>
-              </View>
-            )}
+          <View>
+            <Text style={styles.title}>Recently Sold</Text>
+            <Text style={styles.subtitle}>
+              {cartItems.length > 0
+                ? `${cartItems.length} item${cartItems.length > 1 ? 's' : ''} in cart`
+                : 'Tap to quick-add'}
+            </Text>
           </View>
         </View>
+        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+          <Icon source="close" size={18} color={COLORS.white} />
+        </TouchableOpacity>
       </View>
-    </Modal>
+
+      {/* Content */}
+      <View style={styles.content}>
+        {isLoading ? (
+          <View style={styles.centerContent}>
+            <ActivityIndicator size="large" color={COLORS.orange} />
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        ) : products.length > 0 ? (
+          <FlatList
+            data={products}
+            keyExtractor={item => item.id.toString()}
+            renderItem={renderProductItem}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={COLORS.orange}
+                colors={[COLORS.orange]}
+              />
+            }
+          />
+        ) : (
+          <View style={styles.centerContent}>
+            <View style={styles.emptyIcon}>
+              <Icon source="history" size={28} color={COLORS.textMuted} />
+            </View>
+            <Text style={styles.emptyText}>No Recent Products</Text>
+            <Text style={styles.emptySubtext}>
+              Products you sell will appear here
+            </Text>
+          </View>
+        )}
+      </View>
+    </DraggableBottomSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
-  },
-  container: {
-    backgroundColor: COLORS.darkBg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-    minHeight: '40%',
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -320,7 +293,7 @@ const styles = StyleSheet.create({
   headerIcon: {
     width: 32,
     height: 32,
-    borderRadius: 8,
+    borderRadius: RADIUS.sm,
     backgroundColor: COLORS.orange + '20',
     alignItems: 'center',
     justifyContent: 'center',
@@ -338,7 +311,7 @@ const styles = StyleSheet.create({
   closeButton: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: RADIUS.full,
     backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -387,16 +360,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
-    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    ...SHADOWS.small,
   },
   productItemDisabled: {
     opacity: 0.5,
   },
   productIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.orange + '15',
     alignItems: 'center',
     justifyContent: 'center',
@@ -409,35 +383,35 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     flex: 1,
-    marginLeft: SPACING.sm,
+    marginLeft: SPACING.md,
     marginRight: SPACING.sm,
   },
   productName: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '500',
     color: COLORS.white,
-    marginBottom: 2,
+    marginBottom: 3,
   },
   productMeta: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   productPrice: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: COLORS.green,
   },
   dotSeparator: {
-    fontSize: 10,
+    fontSize: 12,
     color: COLORS.textMuted,
-    marginHorizontal: 4,
+    marginHorizontal: 5,
   },
   stockText: {
-    fontSize: 11,
+    fontSize: 13,
     color: COLORS.textSecondary,
   },
   stockDanger: {
-    fontSize: 11,
+    fontSize: 13,
     color: COLORS.danger,
     fontWeight: '500',
   },
@@ -449,10 +423,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.orange,
-    borderRadius: 6,
+    borderRadius: RADIUS.sm,
     paddingVertical: 6,
     paddingHorizontal: 10,
     gap: 4,
+    ...SHADOWS.orangeGlow,
   },
   addButtonText: {
     fontSize: 12,

@@ -5,17 +5,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
-import {CompositeNavigationProp, useNavigation} from '@react-navigation/native';
+import {CompositeNavigationProp, useNavigation, CommonActions} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import {TabParamList, RootStackParamList, SaleStackParamList} from '@types';
 import {COLORS, SPACING} from '@constants/theme';
 import {useCart} from '../context/CartContext';
 import ProductSearchModal from '@components/ProductSearchModal';
+import RecentProductsModal from '@components/RecentProductsModal';
+import {authService} from '@services/authService';
 import {Product} from '@services/productService';
 
 type SaleScreenNavigationProp = CompositeNavigationProp<
@@ -29,6 +32,8 @@ type SaleScreenNavigationProp = CompositeNavigationProp<
 const SaleScreen: React.FC = () => {
   const navigation = useNavigation<SaleScreenNavigationProp>();
   const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [recentModalVisible, setRecentModalVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const {
     cartItems,
     addToCart,
@@ -36,6 +41,18 @@ const SaleScreen: React.FC = () => {
     updateQuantity,
     getSubtotal,
   } = useCart();
+
+  // Handle logout
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await authService.logout();
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{name: 'Login'}],
+      }),
+    );
+  };
 
   const quickActions = [
     {
@@ -54,12 +71,7 @@ const SaleScreen: React.FC = () => {
       icon: 'history',
       label: 'Recent',
       color: COLORS.orange,
-      onPress: () =>
-        Toast.show({
-          type: 'info',
-          text1: 'Coming Soon',
-          text2: 'Recent items feature coming soon!',
-        }),
+      onPress: () => setRecentModalVisible(true),
     },
   ];
 
@@ -91,9 +103,21 @@ const SaleScreen: React.FC = () => {
           <Icon source="arrow-left" size={24} color={COLORS.white} />
         </TouchableOpacity>
         <Text style={styles.title}>New Sale</Text>
-        <TouchableOpacity style={styles.menuButton}>
-          <Icon source="dots-vertical" size={24} color={COLORS.white} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Icon source="bell-outline" size={24} color={COLORS.white} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleLogout}
+            disabled={isLoggingOut}>
+            {isLoggingOut ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Icon source="power" size={24} color={COLORS.white} />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -253,6 +277,13 @@ const SaleScreen: React.FC = () => {
         onClose={() => setSearchModalVisible(false)}
         onAddToCart={handleAddToCart}
       />
+
+      {/* Recent Products Modal */}
+      <RecentProductsModal
+        visible={recentModalVisible}
+        onClose={() => setRecentModalVisible(false)}
+        onAddToCart={handleAddToCart}
+      />
     </SafeAreaView>
   );
 };
@@ -282,7 +313,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.white,
   },
-  menuButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  iconButton: {
     width: 40,
     height: 40,
     borderRadius: 12,

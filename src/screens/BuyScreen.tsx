@@ -1,19 +1,21 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
-import {CompositeNavigationProp} from '@react-navigation/native';
+import {CompositeNavigationProp, CommonActions} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import {RootStackParamList, TabParamList} from '@types';
 import {COLORS, SPACING} from '@constants/theme';
 import {useAppSelector} from '@store';
+import {authService} from '@services/authService';
 
 type BuyScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'BuyTab'>,
@@ -27,6 +29,19 @@ type BuyScreenProps = {
 const BuyScreen: React.FC<BuyScreenProps> = ({navigation}) => {
   const cartItems = useAppSelector(state => state.cart.items);
   const cartTotal = useAppSelector(state => state.cart.total);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Handle logout
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await authService.logout();
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{name: 'Login'}],
+      }),
+    );
+  };
 
   const quickActions = [
     {icon: 'barcode-scan', label: 'Scan', color: COLORS.green},
@@ -50,14 +65,21 @@ const BuyScreen: React.FC<BuyScreenProps> = ({navigation}) => {
           <Icon source="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.title}>New Purchase</Text>
-        <TouchableOpacity style={styles.cartButton}>
-          <Icon source="cart" size={24} color="#FFFFFF" />
-          {cartItems.length > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{cartItems.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Icon source="bell-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleLogout}
+            disabled={isLoggingOut}>
+            {isLoggingOut ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Icon source="power" size={24} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -188,29 +210,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  cartButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  iconButton: {
     width: 40,
     height: 40,
     borderRadius: 12,
     backgroundColor: COLORS.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: COLORS.pink,
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: 'bold',
   },
   scrollView: {
     flex: 1,

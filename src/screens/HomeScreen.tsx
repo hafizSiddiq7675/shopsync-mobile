@@ -16,6 +16,21 @@ import {COLORS, SPACING} from '@constants/theme';
 import {authService} from '@services/authService';
 import {getDashboardStats, DashboardStats} from '@services/productService';
 
+// Format large numbers with abbreviations
+const formatNumber = (num: number, isCurrency: boolean = false): string => {
+  const prefix = isCurrency ? '$' : '';
+  if (num >= 1000000) {
+    return `${prefix}${(num / 1000000).toFixed(1)}M`;
+  }
+  if (num >= 10000) {
+    return `${prefix}${(num / 1000).toFixed(1)}K`;
+  }
+  if (isCurrency) {
+    return `${prefix}${num.toFixed(2)}`;
+  }
+  return num.toLocaleString();
+};
+
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -89,25 +104,25 @@ const HomeScreen: React.FC = () => {
     {
       icon: 'cash-register',
       label: 'Sales',
-      value: stats ? `$${stats.today_sales.toFixed(2)}` : '$0.00',
+      value: stats ? formatNumber(stats.today_sales, true) : '$0.00',
       color: COLORS.green,
     },
     {
       icon: 'shopping',
       label: 'Orders',
-      value: stats ? stats.today_orders.toString() : '0',
+      value: stats ? formatNumber(stats.today_orders) : '0',
       color: COLORS.purple,
     },
     {
       icon: 'package-variant',
       label: 'Products',
-      value: stats ? stats.today_products_sold.toString() : '0',
+      value: stats ? formatNumber(stats.today_products_sold) : '0',
       color: COLORS.orange,
     },
     {
       icon: 'account-group',
       label: 'Customers',
-      value: stats ? stats.today_customers.toString() : '0',
+      value: stats ? formatNumber(stats.today_customers) : '0',
       color: COLORS.pink,
     },
   ];
@@ -149,7 +164,7 @@ const HomeScreen: React.FC = () => {
             {isLoggingOut ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Icon source="logout" size={24} color="#FFFFFF" />
+              <Icon source="power" size={24} color="#FFFFFF" />
             )}
           </TouchableOpacity>
         </View>
@@ -192,7 +207,13 @@ const HomeScreen: React.FC = () => {
                 ]}>
                 <Icon source={stat.icon} size={24} color={stat.color} />
               </View>
-              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text
+                style={styles.statValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}>
+                {stat.value}
+              </Text>
               <Text style={styles.statLabel}>{stat.label}</Text>
             </View>
           ))}

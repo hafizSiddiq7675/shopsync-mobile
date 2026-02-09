@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -8,18 +8,28 @@ import {
   ActivityIndicator,
   Switch,
   TextInput,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Toast from 'react-native-toast-message';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, CommonActions} from '@react-navigation/native';
 import {Icon} from 'react-native-paper';
 import {SaleStackParamList} from '@types';
 import {COLORS, SPACING} from '@constants/theme';
 import {useCart} from '../context/CartContext';
 import {createTransaction, TransactionPayload} from '@services/productService';
 import {getPaymentMethods, PaymentMethod} from '@services/paymentService';
+import {
+  searchCustomers,
+  getCustomerDetails,
+  Customer,
+  CustomerSearchResult,
+} from '@services/customerService';
+import {authService} from '@services/authService';
 
 type CheckoutScreenNavigationProp = NativeStackNavigationProp<
   SaleStackParamList,
@@ -32,6 +42,18 @@ interface PaymentEntry {
   payment_method_id: number;
   amount: string;
 }
+
+// New customer form data
+interface NewCustomerForm {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  note: string;
+}
+
+// Preset amounts for Points and Store Credit
+const PRESET_AMOUNTS = [5, 10, 25];
 
 const CheckoutScreen: React.FC = () => {
   const navigation = useNavigation<CheckoutScreenNavigationProp>();
@@ -50,10 +72,52 @@ const CheckoutScreen: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [showMethodPicker, setShowMethodPicker] = useState(false);
 
+  // Customer selection
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerResults, setCustomerResults] = useState<CustomerSearchResult[]>([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showCustomerResults, setShowCustomerResults] = useState(false);
+
+  // Logout state
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Validation state
+  const [customerError, setCustomerError] = useState(false);
+
+  // Customer selection modal
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+
+  // New customer modal
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [newCustomerForm, setNewCustomerForm] = useState<NewCustomerForm>({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    note: '',
+  });
+  const [isNewCustomer, setIsNewCustomer] = useState(false);
+
+  // Transaction notes
+  const [transactionNotes, setTransactionNotes] = useState('');
+
   // Load payment methods on mount
   useEffect(() => {
     loadPaymentMethods();
   }, []);
+
+  // Handle logout
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await authService.logout();
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{name: 'Login'}],
+      }),
+    );
+  };
 
   const loadPaymentMethods = async () => {
     setIsLoadingMethods(true);
@@ -65,6 +129,49 @@ const CheckoutScreen: React.FC = () => {
     setIsLoadingMethods(false);
   };
 
+  // Debounced customer search
+  const handleCustomerSearch = useCallback(async (query: string) => {
+    setCustomerSearch(query);
+
+    if (query.length < 2) {
+      setCustomerResults([]);
+      setShowCustomerResults(false);
+      return;
+    }
+
+    setIsSearchingCustomer(true);
+    setShowCustomerResults(true);
+
+    const results = await searchCustomers(query);
+    setCustomerResults(results);
+    setIsSearchingCustomer(false);
+  }, []);
+
+  // Select a customer and load their details
+  const handleSelectCustomer = async (customer: CustomerSearchResult) => {
+    setShowCustomerResults(false);
+    setCustomerSearch('');
+    setIsSearchingCustomer(true);
+
+    const details = await getCustomerDetails(customer.id);
+    if (details) {
+      setSelectedCustomer(details);
+      setCustomerError(false); // Clear validation error
+      Toast.show({
+        type: 'success',
+        text1: 'Customer Selected',
+        text2: `${details.name} - Points: $${details.points_balance.toFixed(2)}, Credit: $${details.store_credit_balance.toFixed(2)}`,
+      });
+    } else {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Could not load customer details',
+      });
+    }
+    setIsSearchingCustomer(false);
+  };
+
   // Calculate tax based on toggle and slider
   const calculateTax = () => {
     if (!taxEnabled) return 0;
@@ -74,16 +181,6 @@ const CheckoutScreen: React.FC = () => {
   // Calculate total with optional tax
   const calculateTotal = () => {
     return getSubtotal() + calculateTax();
-  };
-
-  // Calculate total paid
-  const getTotalPaid = () => {
-    return payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
-  };
-
-  // Calculate remaining balance
-  const getRemainingBalance = () => {
-    return calculateTotal() - getTotalPaid();
   };
 
   // Get payment method name by ID
@@ -98,6 +195,137 @@ const CheckoutScreen: React.FC = () => {
     return getMethodName(selectedMethodId);
   };
 
+  // Check if selected method is Points or Store Credit
+  const isPointsMethod = (methodId: number) => {
+    const method = paymentMethods.find(m => m.id === methodId);
+    return method?.name?.toLowerCase().includes('point');
+  };
+
+  const isStoreCreditMethod = (methodId: number) => {
+    const method = paymentMethods.find(m => m.id === methodId);
+    const name = method?.name?.toLowerCase() || '';
+    return name.includes('credit') || name.includes('store credit');
+  };
+
+  // Get already used points/credit from payments
+  const getUsedPoints = () => {
+    return payments
+      .filter(p => isPointsMethod(p.payment_method_id))
+      .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  };
+
+  const getUsedStoreCredit = () => {
+    return payments
+      .filter(p => isStoreCreditMethod(p.payment_method_id))
+      .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+  };
+
+  // Remove selected customer
+  const handleRemoveCustomer = () => {
+    setSelectedCustomer(null);
+    setIsNewCustomer(false);
+    setNewCustomerForm({
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      note: '',
+    });
+    setCustomerSearch('');
+    // Remove any Points or Store Credit payments when customer is removed
+    setPayments(payments.filter(p =>
+      !isPointsMethod(p.payment_method_id) && !isStoreCreditMethod(p.payment_method_id)
+    ));
+  };
+
+  // Validate email format
+  const isValidEmail = (email: string) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  // Handle save new customer
+  const handleSaveNewCustomer = () => {
+    // Validate required fields
+    if (!newCustomerForm.first_name.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'First name is required',
+      });
+      return;
+    }
+    if (!newCustomerForm.last_name.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Last name is required',
+      });
+      return;
+    }
+    if (!newCustomerForm.email.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Email is required',
+      });
+      return;
+    }
+    if (!isValidEmail(newCustomerForm.email)) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please enter a valid email address',
+      });
+      return;
+    }
+
+    // Set as new customer (not from database)
+    setIsNewCustomer(true);
+    setCustomerError(false);
+    setShowNewCustomerModal(false);
+
+    Toast.show({
+      type: 'success',
+      text1: 'New Customer Added',
+      text2: `${newCustomerForm.first_name} ${newCustomerForm.last_name}`,
+    });
+  };
+
+  // Calculate total paid
+  const getTotalPaid = () => {
+    return payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  };
+
+  // Calculate remaining balance
+  const getRemainingBalance = () => {
+    return calculateTotal() - getTotalPaid();
+  };
+
+  // Get max allowed amount for Points
+  const getMaxPointsAmount = () => {
+    if (!selectedCustomer) return 0;
+    const availablePoints = selectedCustomer.points_balance - getUsedPoints();
+    return Math.min(availablePoints, getRemainingBalance());
+  };
+
+  // Check if preset amount is disabled (for Points only)
+  const isPresetDisabled = (amount: number) => {
+    if (!selectedMethodId) return true;
+    if (!selectedCustomer) return true;
+    return amount > getMaxPointsAmount();
+  };
+
+  // Handle preset amount click
+  const handlePresetAmount = (amount: number) => {
+    if (isPresetDisabled(amount)) return;
+    setPaymentAmount(amount.toFixed(2));
+  };
+
+  // Check if payment method is already added
+  const isPaymentMethodAdded = (methodId: number) => {
+    return payments.some(p => p.payment_method_id === methodId);
+  };
+
   // Add payment entry
   const handleAddPayment = () => {
     if (!selectedMethodId) {
@@ -105,6 +333,16 @@ const CheckoutScreen: React.FC = () => {
         type: 'error',
         text1: 'Error',
         text2: 'Please select a payment method',
+      });
+      return;
+    }
+
+    // Check if payment method is already added
+    if (isPaymentMethodAdded(selectedMethodId)) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: `${getMethodName(selectedMethodId)} is already added`,
       });
       return;
     }
@@ -127,6 +365,64 @@ const CheckoutScreen: React.FC = () => {
         text2: `Amount exceeds remaining balance ($${remaining.toFixed(2)})`,
       });
       return;
+    }
+
+    // Validate Points payment method
+    if (isPointsMethod(selectedMethodId)) {
+      if (!selectedCustomer) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please select a customer to use Points',
+        });
+        return;
+      }
+      if (!selectedCustomer.allow_points) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'This customer is not allowed to use Points',
+        });
+        return;
+      }
+      const availablePoints = selectedCustomer.points_balance - getUsedPoints();
+      if (amount > availablePoints) {
+        Toast.show({
+          type: 'error',
+          text1: 'Insufficient Points',
+          text2: `Available: $${availablePoints.toFixed(2)}`,
+        });
+        return;
+      }
+    }
+
+    // Validate Store Credit payment method
+    if (isStoreCreditMethod(selectedMethodId)) {
+      if (!selectedCustomer) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Please select a customer to use Store Credit',
+        });
+        return;
+      }
+      if (!selectedCustomer.allow_store_credit) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'This customer is not allowed to use Store Credit',
+        });
+        return;
+      }
+      const availableCredit = selectedCustomer.store_credit_balance - getUsedStoreCredit();
+      if (amount > availableCredit) {
+        Toast.show({
+          type: 'error',
+          text1: 'Insufficient Store Credit',
+          text2: `Available: $${availableCredit.toFixed(2)}`,
+        });
+        return;
+      }
     }
 
     const newPayment: PaymentEntry = {
@@ -163,6 +459,17 @@ const CheckoutScreen: React.FC = () => {
       return;
     }
 
+    // Validate customer selection (either existing or new)
+    if (!selectedCustomer && !isNewCustomer) {
+      setCustomerError(true);
+      Toast.show({
+        type: 'error',
+        text1: 'Customer Required',
+        text2: 'Please select or add a customer to complete the sale',
+      });
+      return;
+    }
+
     if (payments.length === 0) {
       Toast.show({
         type: 'error',
@@ -186,6 +493,8 @@ const CheckoutScreen: React.FC = () => {
 
     const total = calculateTotal();
     const tax = calculateTax();
+    const pointsUsed = getUsedPoints();
+    const storeCreditUsed = getUsedStoreCredit();
 
     const payload: TransactionPayload = {
       items: cartItems.map(item => ({
@@ -197,12 +506,26 @@ const CheckoutScreen: React.FC = () => {
         payment_method_id: p.payment_method_id,
         amount: parseFloat(p.amount),
       })),
-      customer_id: null,
       subtotal: getSubtotal(),
       tax: tax,
       total: total,
-      notes: 'Mobile app sale',
+      points_used: pointsUsed > 0 ? pointsUsed : undefined,
+      store_credit_used: storeCreditUsed > 0 ? storeCreditUsed : undefined,
+      notes: transactionNotes.trim() || undefined,
     };
+
+    // Add customer data - either existing customer ID or new customer object
+    if (isNewCustomer) {
+      payload.new_customer = {
+        first_name: newCustomerForm.first_name.trim(),
+        last_name: newCustomerForm.last_name.trim(),
+        email: newCustomerForm.email.trim(),
+        phone: newCustomerForm.phone.trim() || null,
+        note: newCustomerForm.note.trim() || null,
+      };
+    } else if (selectedCustomer) {
+      payload.customer_id = selectedCustomer.id;
+    }
 
     const result = await createTransaction(payload);
 
@@ -241,13 +564,164 @@ const CheckoutScreen: React.FC = () => {
           <Icon source="arrow-left" size={24} color={COLORS.white} />
         </TouchableOpacity>
         <Text style={styles.title}>Checkout</Text>
-        <View style={styles.placeholder} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Icon source="bell-outline" size={24} color={COLORS.white} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={handleLogout}
+            disabled={isLoggingOut}>
+            {isLoggingOut ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Icon source="power" size={24} color={COLORS.white} />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
+        {/* Customer Selection - First (Required) */}
+        <Text style={styles.sectionTitle}>Customer {!selectedCustomer && !isNewCustomer && <Text style={styles.requiredStar}>*</Text>}</Text>
+        <View style={[styles.customerSection, customerError && styles.customerSectionError]}>
+          {selectedCustomer ? (
+            <View style={styles.selectedCustomer}>
+              <View style={styles.customerHeader}>
+                <Icon source="account" size={24} color={COLORS.purple} />
+                <View style={styles.customerDetails}>
+                  <Text style={styles.customerName}>{selectedCustomer.name}</Text>
+                  <Text style={styles.customerEmail}>{selectedCustomer.email}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.removeCustomerButton}
+                  onPress={handleRemoveCustomer}>
+                  <Icon source="close" size={18} color={COLORS.danger} />
+                </TouchableOpacity>
+              </View>
+                {/* Points Details */}
+                {selectedCustomer.allow_points && (
+                  <View style={styles.balanceSection}>
+                    <View style={styles.balanceSectionHeader}>
+                      <Icon source="star" size={16} color={COLORS.orange} />
+                      <Text style={styles.balanceSectionTitle}>Points</Text>
+                    </View>
+                    <View style={styles.balanceGrid}>
+                      <View style={styles.balanceGridItem}>
+                        <Text style={styles.balanceGridLabel}>Current Balance</Text>
+                        <Text style={styles.balanceGridValueHighlight}>
+                          ${selectedCustomer.points_balance.toFixed(2)}
+                        </Text>
+                      </View>
+                      <View style={styles.balanceGridItem}>
+                        <Text style={styles.balanceGridLabel}>Lifetime Earned</Text>
+                        <Text style={styles.balanceGridValue}>
+                          {selectedCustomer.lifetime_points_earned.toLocaleString()} pts
+                        </Text>
+                      </View>
+                      <View style={styles.balanceGridItem}>
+                        <Text style={styles.balanceGridLabel}>Lifetime Redeemed</Text>
+                        <Text style={styles.balanceGridValue}>
+                          {selectedCustomer.lifetime_points_redeemed.toLocaleString()} pts
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {/* Store Credit Details */}
+                {selectedCustomer.allow_store_credit && (
+                  <View style={styles.balanceSection}>
+                    <View style={styles.balanceSectionHeader}>
+                      <Icon source="wallet" size={16} color={COLORS.green} />
+                      <Text style={styles.balanceSectionTitle}>Store Credit</Text>
+                    </View>
+                    <View style={styles.balanceGrid}>
+                      <View style={styles.balanceGridItem}>
+                        <Text style={styles.balanceGridLabel}>Current Balance</Text>
+                        <Text style={styles.balanceGridValueHighlight}>
+                          ${selectedCustomer.store_credit_balance.toFixed(2)}
+                        </Text>
+                      </View>
+                      <View style={styles.balanceGridItem}>
+                        <Text style={styles.balanceGridLabel}>Lifetime Earned</Text>
+                        <Text style={styles.balanceGridValue}>
+                          ${selectedCustomer.lifetime_store_credit_earned.toFixed(2)}
+                        </Text>
+                      </View>
+                      <View style={styles.balanceGridItem}>
+                        <Text style={styles.balanceGridLabel}>Lifetime Used</Text>
+                        <Text style={styles.balanceGridValue}>
+                          ${selectedCustomer.lifetime_store_credit_used.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+            </View>
+          ) : isNewCustomer ? (
+            // New Customer Display
+            <View style={styles.selectedCustomer}>
+              <View style={styles.customerHeader}>
+                <View style={styles.newCustomerBadge}>
+                  <Icon source="account-plus" size={20} color={COLORS.green} />
+                </View>
+                <View style={styles.customerDetails}>
+                  <View style={styles.newCustomerNameRow}>
+                    <Text style={styles.customerName}>
+                      {newCustomerForm.first_name} {newCustomerForm.last_name}
+                    </Text>
+                    <View style={styles.newBadge}>
+                      <Text style={styles.newBadgeText}>NEW</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.customerEmail}>{newCustomerForm.email}</Text>
+                  {newCustomerForm.phone && (
+                    <Text style={styles.customerPhone}>{newCustomerForm.phone}</Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.removeCustomerButton}
+                  onPress={handleRemoveCustomer}>
+                  <Icon source="close" size={18} color={COLORS.danger} />
+                </TouchableOpacity>
+              </View>
+              {newCustomerForm.note && (
+                <View style={styles.customerNoteSection}>
+                  <Icon source="note-text" size={14} color={COLORS.textMuted} />
+                  <Text style={styles.customerNoteText}>{newCustomerForm.note}</Text>
+                </View>
+              )}
+              <View style={styles.newCustomerInfo}>
+                <Icon source="information-outline" size={14} color={COLORS.textMuted} />
+                <Text style={styles.newCustomerInfoText}>
+                  New customer - Points and Store Credit not available
+                </Text>
+              </View>
+            </View>
+          ) : (
+            // Select Customer Card Button
+            <TouchableOpacity
+              style={styles.selectCustomerCard}
+              onPress={() => setShowCustomerModal(true)}
+              activeOpacity={0.8}>
+              <View style={styles.selectCustomerIcon}>
+                <Icon source="account-group" size={28} color={COLORS.white} />
+              </View>
+              <View style={styles.selectCustomerContent}>
+                <Text style={styles.selectCustomerTitle}>Select Customer</Text>
+                <Text style={styles.selectCustomerSubtitle}>
+                  Choose customer for sale
+                </Text>
+              </View>
+              <Icon source="chevron-right" size={24} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+
         {/* Order Summary */}
         <Text style={styles.sectionTitle}>Order Summary</Text>
         <View style={styles.orderSummary}>
@@ -288,48 +762,6 @@ const CheckoutScreen: React.FC = () => {
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>${calculateTotal().toFixed(2)}</Text>
           </View>
-        </View>
-
-        {/* Tax Settings */}
-        <Text style={styles.sectionTitle}>Tax Settings</Text>
-        <View style={styles.taxSettings}>
-          <View style={styles.taxToggleRow}>
-            <View style={styles.taxToggleInfo}>
-              <Icon source="percent" size={20} color={COLORS.orange} />
-              <Text style={styles.taxToggleLabel}>Enable Sales Tax</Text>
-            </View>
-            <Switch
-              style={styles.taxSwitch}
-              value={taxEnabled}
-              onValueChange={setTaxEnabled}
-              trackColor={{false: COLORS.inputBg, true: COLORS.purple + '80'}}
-              thumbColor={taxEnabled ? COLORS.purple : COLORS.textMuted}
-            />
-          </View>
-
-          {taxEnabled && (
-            <View style={styles.taxSliderContainer}>
-              <View style={styles.taxSliderHeader}>
-                <Text style={styles.taxSliderLabel}>Tax Rate</Text>
-                <Text style={styles.taxSliderValue}>{taxRate}%</Text>
-              </View>
-              <Slider
-                style={styles.taxSlider}
-                minimumValue={0}
-                maximumValue={100}
-                step={1}
-                value={taxRate}
-                onValueChange={setTaxRate}
-                minimumTrackTintColor={COLORS.purple}
-                maximumTrackTintColor={COLORS.inputBg}
-                thumbTintColor={COLORS.purple}
-              />
-              <View style={styles.taxSliderLabels}>
-                <Text style={styles.taxSliderMinMax}>0%</Text>
-                <Text style={styles.taxSliderMinMax}>100%</Text>
-              </View>
-            </View>
-          )}
         </View>
 
         {/* Payment Methods */}
@@ -384,31 +816,88 @@ const CheckoutScreen: React.FC = () => {
               {/* Method Picker Dropdown */}
               {showMethodPicker && (
                 <View style={styles.methodPicker}>
-                  {paymentMethods.map(method => (
-                    <TouchableOpacity
-                      key={method.id}
-                      style={[
-                        styles.methodOption,
-                        selectedMethodId === method.id &&
-                          styles.methodOptionActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedMethodId(method.id);
-                        setShowMethodPicker(false);
-                      }}>
-                      <Text
+                  {paymentMethods.map(method => {
+                    const isAdded = isPaymentMethodAdded(method.id);
+                    return (
+                      <TouchableOpacity
+                        key={method.id}
                         style={[
-                          styles.methodOptionText,
-                          selectedMethodId === method.id &&
-                            styles.methodOptionTextActive,
-                        ]}>
-                        {method.name}
+                          styles.methodOption,
+                          selectedMethodId === method.id && styles.methodOptionActive,
+                          isAdded && styles.methodOptionDisabled,
+                        ]}
+                        onPress={() => {
+                          if (!isAdded) {
+                            setSelectedMethodId(method.id);
+                            setShowMethodPicker(false);
+                          }
+                        }}
+                        disabled={isAdded}>
+                        <View style={styles.methodOptionContent}>
+                          <Text
+                            style={[
+                              styles.methodOptionText,
+                              selectedMethodId === method.id && styles.methodOptionTextActive,
+                              isAdded && styles.methodOptionTextDisabled,
+                            ]}>
+                            {method.name}
+                          </Text>
+                          {isAdded && (
+                            <Text style={styles.methodOptionAddedLabel}>Added</Text>
+                          )}
+                        </View>
+                        {selectedMethodId === method.id && !isAdded && (
+                          <Icon source="check" size={18} color={COLORS.purple} />
+                        )}
+                        {isAdded && (
+                          <Icon source="check-circle" size={18} color={COLORS.green} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Preset Amount Buttons for Points only */}
+              {selectedMethodId && isPointsMethod(selectedMethodId) && (
+                <View style={styles.presetAmountsContainer}>
+                  <View style={styles.presetAmountsHeader}>
+                    <Icon source="star" size={16} color={COLORS.orange} />
+                    <Text style={styles.presetAmountsLabel}>Use Points</Text>
+                    {selectedCustomer && (
+                      <Text style={styles.presetAmountsBalance}>
+                        (Available: ${getMaxPointsAmount().toFixed(2)})
                       </Text>
-                      {selectedMethodId === method.id && (
-                        <Icon source="check" size={18} color={COLORS.purple} />
-                      )}
-                    </TouchableOpacity>
-                  ))}
+                    )}
+                  </View>
+                  <View style={styles.presetAmountsRow}>
+                    {PRESET_AMOUNTS.map(amount => {
+                      const disabled = isPresetDisabled(amount);
+                      return (
+                        <TouchableOpacity
+                          key={amount}
+                          style={[
+                            styles.presetButton,
+                            disabled && styles.presetButtonDisabled,
+                          ]}
+                          onPress={() => handlePresetAmount(amount)}
+                          disabled={disabled}>
+                          <Text
+                            style={[
+                              styles.presetButtonText,
+                              disabled && styles.presetButtonTextDisabled,
+                            ]}>
+                            ${amount}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {!selectedCustomer && (
+                    <Text style={styles.presetWarning}>
+                      Select a customer to use Points
+                    </Text>
+                  )}
                 </View>
               )}
 
@@ -465,6 +954,63 @@ const CheckoutScreen: React.FC = () => {
           )}
         </View>
 
+        {/* Tax Settings */}
+        <Text style={styles.sectionTitle}>Tax Settings</Text>
+        <View style={styles.taxSettings}>
+          <View style={styles.taxToggleRow}>
+            <View style={styles.taxToggleInfo}>
+              <Icon source="percent" size={20} color={COLORS.orange} />
+              <Text style={styles.taxToggleLabel}>Enable Sales Tax</Text>
+            </View>
+            <Switch
+              style={styles.taxSwitch}
+              value={taxEnabled}
+              onValueChange={setTaxEnabled}
+              trackColor={{false: COLORS.inputBg, true: COLORS.purple + '80'}}
+              thumbColor={taxEnabled ? COLORS.purple : COLORS.textMuted}
+            />
+          </View>
+
+          {taxEnabled && (
+            <View style={styles.taxSliderContainer}>
+              <View style={styles.taxSliderHeader}>
+                <Text style={styles.taxSliderLabel}>Tax Rate</Text>
+                <Text style={styles.taxSliderValue}>{taxRate}%</Text>
+              </View>
+              <Slider
+                style={styles.taxSlider}
+                minimumValue={0}
+                maximumValue={100}
+                step={1}
+                value={taxRate}
+                onValueChange={setTaxRate}
+                minimumTrackTintColor={COLORS.purple}
+                maximumTrackTintColor={COLORS.inputBg}
+                thumbTintColor={COLORS.purple}
+              />
+              <View style={styles.taxSliderLabels}>
+                <Text style={styles.taxSliderMinMax}>0%</Text>
+                <Text style={styles.taxSliderMinMax}>100%</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Transaction Notes */}
+        <Text style={styles.sectionTitle}>Transaction Note</Text>
+        <View style={styles.notesSection}>
+          <TextInput
+            style={styles.notesInput}
+            placeholder="Add any notes about this transaction..."
+            placeholderTextColor={COLORS.textMuted}
+            value={transactionNotes}
+            onChangeText={setTransactionNotes}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+        </View>
+
         {/* Complete Sale Button */}
         <TouchableOpacity
           style={[
@@ -489,6 +1035,206 @@ const CheckoutScreen: React.FC = () => {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* New Customer Modal */}
+      <Modal
+        visible={showNewCustomerModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNewCustomerModal(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowNewCustomerModal(false)}>
+                <Icon source="close" size={20} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>New Customer</Text>
+              <View style={styles.modalCloseButton} />
+            </View>
+
+            {/* Form */}
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              {/* Name Row */}
+              <View style={styles.formRow}>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>First Name <Text style={styles.requiredStar}>*</Text></Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="First Name"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={newCustomerForm.first_name}
+                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, first_name: v})}
+                  />
+                </View>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Last Name <Text style={styles.requiredStar}>*</Text></Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Last Name"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={newCustomerForm.last_name}
+                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, last_name: v})}
+                  />
+                </View>
+              </View>
+
+              {/* Email & Phone Row */}
+              <View style={styles.formRow}>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Email <Text style={styles.requiredStar}>*</Text></Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Email"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={newCustomerForm.email}
+                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, email: v})}
+                  />
+                </View>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Phone Number</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Phone Number"
+                    placeholderTextColor={COLORS.textMuted}
+                    keyboardType="phone-pad"
+                    value={newCustomerForm.phone}
+                    onChangeText={(v) => setNewCustomerForm({...newCustomerForm, phone: v})}
+                  />
+                </View>
+              </View>
+
+              {/* Customer Notes */}
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Customer Notes</Text>
+                <TextInput
+                  style={[styles.formInput, styles.formTextArea]}
+                  placeholder="Add notes about this customer (will be saved with customer record)"
+                  placeholderTextColor={COLORS.textMuted}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  value={newCustomerForm.note}
+                  onChangeText={(v) => setNewCustomerForm({...newCustomerForm, note: v})}
+                />
+              </View>
+            </ScrollView>
+
+            {/* Save Button */}
+            <TouchableOpacity
+              style={styles.saveCustomerButton}
+              onPress={handleSaveNewCustomer}>
+              <Icon source="content-save" size={20} color={COLORS.white} />
+              <Text style={styles.saveCustomerButtonText}>Save Customer</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Customer Selection Modal */}
+      <Modal
+        visible={showCustomerModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCustomerModal(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}>
+          <View style={styles.customerModalContainer}>
+            {/* Modal Header */}
+            <View style={styles.customerModalHeader}>
+              <View style={styles.customerModalHeaderLeft}>
+                <View style={styles.customerModalHeaderIcon}>
+                  <Icon source="account-group" size={20} color={COLORS.purple} />
+                </View>
+                <Text style={styles.customerModalHeaderTitle}>Select Customer</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowCustomerModal(false)}>
+                <Icon source="close" size={20} color={COLORS.white} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Input */}
+            <View style={styles.customerModalSearch}>
+              <View style={styles.searchInputContainer}>
+                <Icon source="magnify" size={20} color={COLORS.textMuted} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search by name, email, phone..."
+                  placeholderTextColor={COLORS.textMuted}
+                  value={customerSearch}
+                  onChangeText={handleCustomerSearch}
+                  autoFocus
+                />
+                {isSearchingCustomer && (
+                  <ActivityIndicator size="small" color={COLORS.purple} />
+                )}
+              </View>
+            </View>
+
+            {/* Search Results */}
+            <ScrollView style={styles.customerModalResults} showsVerticalScrollIndicator={false}>
+              {showCustomerResults && customerResults.length > 0 && (
+                <View style={styles.customerResultsList}>
+                  {customerResults.map(customer => (
+                    <TouchableOpacity
+                      key={customer.id}
+                      style={styles.customerResultItem}
+                      onPress={() => {
+                        handleSelectCustomer(customer);
+                        setShowCustomerModal(false);
+                      }}>
+                      <View style={styles.customerResultIcon}>
+                        <Icon source="account" size={24} color={COLORS.purple} />
+                      </View>
+                      <View style={styles.customerResultInfo}>
+                        <Text style={styles.customerResultName}>{customer.name}</Text>
+                        <Text style={styles.customerResultEmail}>{customer.email}</Text>
+                      </View>
+                      <Icon source="chevron-right" size={20} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              {showCustomerResults && customerResults.length === 0 && !isSearchingCustomer && customerSearch.length >= 2 && (
+                <View style={styles.noResultsContainer}>
+                  <Icon source="account-search" size={48} color={COLORS.textMuted} />
+                  <Text style={styles.noResultsTitle}>No customers found</Text>
+                  <Text style={styles.noResultsSubtitle}>Try a different search term or add a new customer</Text>
+                </View>
+              )}
+              {!showCustomerResults && (
+                <View style={styles.searchHintContainer}>
+                  <Icon source="account-search" size={48} color={COLORS.textMuted} />
+                  <Text style={styles.searchHintText}>Search for an existing customer</Text>
+                  <Text style={styles.searchHintSubtext}>Enter name, email, or phone number</Text>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Add New Customer Button */}
+            <View style={styles.customerModalFooter}>
+              <TouchableOpacity
+                style={styles.addNewCustomerButtonModal}
+                onPress={() => {
+                  setShowCustomerModal(false);
+                  setShowNewCustomerModal(true);
+                }}>
+                <Icon source="plus" size={20} color={COLORS.white} />
+                <Text style={styles.addNewCustomerText}>Add New Customer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -518,8 +1264,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.white,
   },
-  placeholder: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  iconButton: {
     width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,
@@ -533,6 +1288,10 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginBottom: SPACING.sm,
     marginTop: SPACING.sm,
+  },
+  requiredStar: {
+    color: COLORS.danger,
+    fontWeight: '700',
   },
   orderSummary: {
     backgroundColor: COLORS.cardBg,
@@ -733,6 +1492,16 @@ const styles = StyleSheet.create({
   methodOptionActive: {
     backgroundColor: COLORS.purple + '20',
   },
+  methodOptionDisabled: {
+    backgroundColor: COLORS.inputBg,
+    opacity: 0.7,
+  },
+  methodOptionContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
   methodOptionText: {
     fontSize: 14,
     color: COLORS.textSecondary,
@@ -740,6 +1509,18 @@ const styles = StyleSheet.create({
   methodOptionTextActive: {
     color: COLORS.white,
     fontWeight: '500',
+  },
+  methodOptionTextDisabled: {
+    color: COLORS.textMuted,
+  },
+  methodOptionAddedLabel: {
+    fontSize: 10,
+    color: COLORS.green,
+    backgroundColor: COLORS.green + '20',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontWeight: '600',
   },
   paymentsList: {
     marginTop: SPACING.md,
@@ -835,6 +1616,498 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 100,
+  },
+  // Customer section styles
+  customerSection: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    padding: SPACING.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  customerSectionError: {
+    borderColor: COLORS.danger,
+  },
+  selectedCustomer: {
+    flex: 1,
+  },
+  customerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  customerDetails: {
+    flex: 1,
+  },
+  customerName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  customerEmail: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  balanceSection: {
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  balanceSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  balanceSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  balanceGrid: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    padding: SPACING.sm,
+  },
+  balanceGridItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  balanceGridLabel: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  balanceGridValue: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  balanceGridValueHighlight: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.green,
+    textAlign: 'center',
+  },
+  removeCustomerButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: COLORS.danger + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customerSearchContainer: {
+    gap: SPACING.sm,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.white,
+    paddingVertical: SPACING.md,
+  },
+  customerResults: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  customerResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    padding: SPACING.md,
+    gap: SPACING.md,
+  },
+  customerResultInfo: {
+    flex: 1,
+  },
+  customerResultName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  customerResultEmail: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  noResults: {
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+  },
+  // Preset amount buttons styles
+  presetAmountsContainer: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  presetAmountsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  presetAmountsLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.white,
+  },
+  presetAmountsBalance: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  presetAmountsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  presetButton: {
+    flex: 1,
+    backgroundColor: COLORS.purple + '20',
+    borderRadius: 10,
+    paddingVertical: SPACING.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.purple,
+  },
+  presetButtonDisabled: {
+    backgroundColor: COLORS.inputBg,
+    borderColor: COLORS.border,
+  },
+  presetButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.purple,
+  },
+  presetButtonTextDisabled: {
+    color: COLORS.textMuted,
+  },
+  presetWarning: {
+    fontSize: 12,
+    color: COLORS.orange,
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+  },
+  // New Customer styles
+  newCustomerBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.green + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newCustomerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  newBadge: {
+    backgroundColor: COLORS.green,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  newBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  customerPhone: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  customerNoteSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  customerNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+  },
+  newCustomerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  newCustomerInfoText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+  },
+  addNewCustomerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.green,
+    borderRadius: 10,
+    paddingVertical: SPACING.md,
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  addNewCustomerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  // Transaction Notes styles
+  notesSection: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    padding: SPACING.md,
+  },
+  notesInput: {
+    fontSize: 14,
+    color: COLORS.white,
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    padding: SPACING.md,
+    minHeight: 80,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: COLORS.darkBg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  modalContent: {
+    padding: SPACING.md,
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  formHalf: {
+    flex: 1,
+  },
+  formGroup: {
+    marginBottom: SPACING.md,
+  },
+  formLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.xs,
+  },
+  formInput: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    fontSize: 14,
+    color: COLORS.white,
+  },
+  formTextArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  saveCustomerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.green,
+    borderRadius: 12,
+    paddingVertical: SPACING.md,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
+    gap: SPACING.xs,
+  },
+  saveCustomerButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  // Select Customer Card styles
+  selectCustomerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  selectCustomerIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: COLORS.purple,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectCustomerContent: {
+    flex: 1,
+    marginLeft: SPACING.md,
+  },
+  selectCustomerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  selectCustomerSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  // Customer Selection Modal styles
+  customerModalContainer: {
+    backgroundColor: COLORS.darkBg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '80%',
+  },
+  customerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  customerModalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  customerModalHeaderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.purple + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customerModalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  customerModalSearch: {
+    padding: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  customerModalResults: {
+    flex: 1,
+    padding: SPACING.md,
+  },
+  customerResultsList: {
+    gap: SPACING.sm,
+  },
+  customerResultIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.purple + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noResultsContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl * 2,
+  },
+  noResultsTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    marginTop: SPACING.md,
+  },
+  noResultsSubtitle: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+    textAlign: 'center',
+  },
+  searchHintContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xl * 2,
+  },
+  searchHintText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    marginTop: SPACING.md,
+  },
+  searchHintSubtext: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: SPACING.xs,
+  },
+  customerModalFooter: {
+    padding: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  addNewCustomerButtonModal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.green,
+    borderRadius: 12,
+    paddingVertical: SPACING.md,
+    gap: SPACING.xs,
   },
 });
 

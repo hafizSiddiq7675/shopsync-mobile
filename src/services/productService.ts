@@ -44,14 +44,26 @@ export interface PaymentItem {
   amount: number;
 }
 
+// New customer data for transaction
+export interface NewCustomerData {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string | null;
+  note?: string | null;
+}
+
 // Transaction payload for checkout
 export interface TransactionPayload {
   items: TransactionItem[];
   payments: PaymentItem[];
   customer_id?: number | null;
+  new_customer?: NewCustomerData;
   subtotal: number;
   tax: number;
   total: number;
+  points_used?: number;
+  store_credit_used?: number;
   notes?: string;
 }
 

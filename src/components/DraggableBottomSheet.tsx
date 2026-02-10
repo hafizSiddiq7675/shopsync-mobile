@@ -1,11 +1,13 @@
 import React, {useEffect, useRef} from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   Modal,
   Animated,
   Dimensions,
   TouchableWithoutFeedback,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -13,6 +15,7 @@ import {
   PanGestureHandler,
   PanGestureHandlerGestureEvent,
 } from 'react-native-gesture-handler';
+import {Icon} from 'react-native-paper';
 import {COLORS, SPACING, RADIUS} from '@constants/theme';
 
 const {height: SCREEN_HEIGHT} = Dimensions.get('window');
@@ -22,6 +25,7 @@ interface DraggableBottomSheetProps {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  title?: string;
   minHeight?: string | number;
   maxHeight?: string | number;
   avoidKeyboard?: boolean;
@@ -31,6 +35,7 @@ const DraggableBottomSheet: React.FC<DraggableBottomSheetProps> = ({
   visible,
   onClose,
   children,
+  title,
   minHeight = '50%',
   maxHeight = '85%',
   avoidKeyboard = false,
@@ -108,6 +113,16 @@ const DraggableBottomSheet: React.FC<DraggableBottomSheetProps> = ({
           </Animated.View>
         </PanGestureHandler>
 
+        {/* Header with Title and Close Button */}
+        {title && (
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>{title}</Text>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Icon source="close" size={20} color={COLORS.white} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Content */}
         {children}
       </Animated.View>
@@ -160,6 +175,28 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: COLORS.textMuted,
     borderRadius: 2,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

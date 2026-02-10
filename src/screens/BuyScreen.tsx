@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
@@ -13,7 +12,8 @@ import {CompositeNavigationProp, CommonActions} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import {RootStackParamList, TabParamList} from '@types';
-import {COLORS, SPACING} from '@constants/theme';
+import {COLORS, SPACING, RADIUS} from '@constants/theme';
+import Header from '@components/Header';
 import {useAppSelector} from '@store';
 import {authService} from '@services/authService';
 
@@ -58,29 +58,13 @@ const BuyScreen: React.FC<BuyScreenProps> = ({navigation}) => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.navigate('HomeTab')}>
-          <Icon source="arrow-left" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.title}>New Purchase</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Icon source="bell-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={handleLogout}
-            disabled={isLoggingOut}>
-            {isLoggingOut ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Icon source="power" size={24} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+      <Header
+        title="New Purchase"
+        showBackButton
+        onBackPress={() => navigation.navigate('HomeTab')}
+        onLogoutPress={handleLogout}
+        isLoggingOut={isLoggingOut}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -189,38 +173,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.darkBg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,

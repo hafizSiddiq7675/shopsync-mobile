@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -14,7 +13,8 @@ import {CompositeNavigationProp, useNavigation, CommonActions} from '@react-navi
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import {TabParamList, RootStackParamList, SaleStackParamList} from '@types';
-import {COLORS, SPACING} from '@constants/theme';
+import {COLORS, SPACING, RADIUS} from '@constants/theme';
+import Header from '@components/Header';
 import {useCart} from '../context/CartContext';
 import ProductSearchModal from '@components/ProductSearchModal';
 import RecentProductsModal from '@components/RecentProductsModal';
@@ -96,29 +96,13 @@ const SaleScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.navigate('HomeTab')}>
-          <Icon source="arrow-left" size={24} color={COLORS.white} />
-        </TouchableOpacity>
-        <Text style={styles.title}>New Sale</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Icon source="bell-outline" size={24} color={COLORS.white} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={handleLogout}
-            disabled={isLoggingOut}>
-            {isLoggingOut ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <Icon source="power" size={24} color={COLORS.white} />
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+      <Header
+        title="New Sale"
+        showBackButton
+        onBackPress={() => navigation.navigate('HomeTab')}
+        onLogoutPress={handleLogout}
+        isLoggingOut={isLoggingOut}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -292,38 +276,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.darkBg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.white,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,

@@ -16,6 +16,7 @@ import {useNavigation, CommonActions} from '@react-navigation/native';
 import {Icon} from 'react-native-paper';
 import {SaleStackParamList} from '@types';
 import {COLORS, SPACING, RADIUS, SHADOWS} from '@constants/theme';
+import Header from '@components/Header';
 import {useCart, CustomProductForm} from '../context/CartContext';
 import {createTransaction, TransactionPayload, CustomTransactionItem} from '@services/productService';
 import {getPaymentMethods, PaymentMethod} from '@services/paymentService';
@@ -656,29 +657,13 @@ const CheckoutScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}>
-          <Icon source="arrow-left" size={24} color={COLORS.white} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Checkout</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Icon source="bell-outline" size={24} color={COLORS.white} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={handleLogout}
-            disabled={isLoggingOut}>
-            {isLoggingOut ? (
-              <ActivityIndicator size="small" color={COLORS.white} />
-            ) : (
-              <Icon source="power" size={24} color={COLORS.white} />
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+      <Header
+        title="Checkout"
+        showBackButton
+        onBackPress={() => navigation.goBack()}
+        onLogoutPress={handleLogout}
+        isLoggingOut={isLoggingOut}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -1652,38 +1637,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.darkBg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.white,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,

@@ -13,6 +13,7 @@ import {useNavigation, CommonActions, useFocusEffect} from '@react-navigation/na
 import {Icon} from 'react-native-paper';
 import {AuthUser, Shop} from '@types';
 import {COLORS, SPACING, RADIUS, SHADOWS} from '@constants/theme';
+import Header from '@components/Header';
 import {authService} from '@services/authService';
 import {getDashboardStats, DashboardStats} from '@services/productService';
 
@@ -130,45 +131,34 @@ const HomeScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.userSection}>
-          <View style={styles.avatarContainer}>
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Icon source="account" size={32} color="#FFFFFF" />
-            )}
+      <Header
+        onLogoutPress={handleLogout}
+        isLoggingOut={isLoggingOut}
+        leftComponent={
+          <View style={styles.userSection}>
+            <View style={styles.avatarContainer}>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Icon source="account" size={32} color="#FFFFFF" />
+              )}
+            </View>
+            <View style={styles.userInfo}>
+              {isLoading ? (
+                <>
+                  <View style={styles.skeletonName} />
+                  <View style={styles.skeletonShop} />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.userName}>{user?.name || 'User'}</Text>
+                  <Text style={styles.shopName}>{shop?.name || 'Shop'}</Text>
+                </>
+              )}
+            </View>
           </View>
-          <View style={styles.userInfo}>
-            {isLoading ? (
-              <>
-                <View style={styles.skeletonName} />
-                <View style={styles.skeletonShop} />
-              </>
-            ) : (
-              <>
-                <Text style={styles.userName}>{user?.name || 'User'}</Text>
-                <Text style={styles.shopName}>{shop?.name || 'Shop'}</Text>
-              </>
-            )}
-          </View>
-        </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Icon source="bell-outline" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconButton}
-            onPress={handleLogout}
-            disabled={isLoggingOut}>
-            {isLoggingOut ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Icon source="power" size={24} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -300,13 +290,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.darkBg,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-  },
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -344,18 +327,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A2A4A',
     borderRadius: 4,
     marginTop: 4,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: RADIUS.lg,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   scrollView: {
     flex: 1,

@@ -3,9 +3,21 @@ import {StyleSheet, View, Text} from 'react-native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
-import {HomeScreen, SaleScreen, BuyScreen, CheckoutScreen} from '@screens';
+import {
+  HomeScreen,
+  SaleScreen,
+  CheckoutScreen,
+  BuyListScreen,
+  BuyDetailsScreen,
+  Step1CustomerScreen,
+  Step2PaymentScreen,
+  Step3ItemsScreen,
+  Step4ReviewScreen,
+  Step5CompleteScreen,
+} from '@screens';
 import {COLORS} from '@constants/theme';
-import {SaleStackParamList} from '@types';
+import {SaleStackParamList, BuyStackParamList, BuyWizardStackParamList} from '@types';
+import {BuyWizardProvider} from '@contexts/BuyWizardContext';
 
 export type TabParamList = {
   HomeTab: undefined;
@@ -16,6 +28,8 @@ export type TabParamList = {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 const SaleStack = createNativeStackNavigator<SaleStackParamList>();
+const BuyStack = createNativeStackNavigator<BuyStackParamList>();
+const BuyWizardStack = createNativeStackNavigator<BuyWizardStackParamList>();
 
 // Nested Sale Stack Navigator (keeps bottom tabs visible)
 const SaleStackNavigator: React.FC = () => {
@@ -24,6 +38,38 @@ const SaleStackNavigator: React.FC = () => {
       <SaleStack.Screen name="Sale" component={SaleScreen} />
       <SaleStack.Screen name="Checkout" component={CheckoutScreen} />
     </SaleStack.Navigator>
+  );
+};
+
+// Buy Wizard Navigator (wrapped with provider)
+const BuyWizardNavigator: React.FC = () => {
+  return (
+    <BuyWizardProvider>
+      <BuyWizardStack.Navigator screenOptions={{headerShown: false}}>
+        <BuyWizardStack.Screen name="Step1Customer" component={Step1CustomerScreen} />
+        <BuyWizardStack.Screen name="Step2Payment" component={Step2PaymentScreen} />
+        <BuyWizardStack.Screen name="Step3Items" component={Step3ItemsScreen} />
+        <BuyWizardStack.Screen name="Step4Review" component={Step4ReviewScreen} />
+        <BuyWizardStack.Screen name="Step5Complete" component={Step5CompleteScreen} />
+      </BuyWizardStack.Navigator>
+    </BuyWizardProvider>
+  );
+};
+
+// Nested Buy Stack Navigator (keeps bottom tabs visible)
+const BuyStackNavigator: React.FC = () => {
+  return (
+    <BuyStack.Navigator screenOptions={{headerShown: false}}>
+      <BuyStack.Screen name="BuyList" component={BuyListScreen} />
+      <BuyStack.Screen name="BuyDetails" component={BuyDetailsScreen} />
+      <BuyStack.Screen
+        name="BuyWizard"
+        component={BuyWizardNavigator}
+        options={{
+          animation: 'slide_from_bottom',
+        }}
+      />
+    </BuyStack.Navigator>
   );
 };
 
@@ -165,7 +211,7 @@ const TabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="BuyTab"
-        component={BuyScreen}
+        component={BuyStackNavigator}
         options={{
           tabBarIcon: ({focused}) => (
             <TabIconButton

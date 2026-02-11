@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation} from '@react-navigation/native';
@@ -33,7 +34,17 @@ const STEP_LABELS = ['Customer', 'Payment', 'Items', 'Review', 'Complete'];
 
 const Step3ItemsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
-  const {state, dispatch, totalSellValue, totalBuyAmount, getItemCostBasis} = useBuyWizard();
+  const {
+    state,
+    dispatch,
+    totalSellValue,
+    totalBuyAmount,
+    getItemCostBasis,
+    saveCostMode,
+    addItemToServer,
+    updateItemOnServer,
+    deleteItemFromServer,
+  } = useBuyWizard();
 
   // Item modal state
   const [itemModalVisible, setItemModalVisible] = useState(false);
@@ -43,18 +54,33 @@ const Step3ItemsScreen: React.FC = () => {
   const [itemCondition, setItemCondition] = useState<ItemCondition>('nm');
   const [itemCost, setItemCost] = useState('');
   const [itemSellPrice, setItemSellPrice] = useState('');
+  const [isSavingItem, setIsSavingItem] = useState(false);
 
   // Action menu state
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // Set cost entry mode
-  const setCostEntryMode = (mode: CostEntryMode) => {
+  const setCostEntryMode = async (mode: CostEntryMode) => {
     dispatch({type: 'SET_COST_ENTRY_MODE', payload: mode});
+    // Auto-save to server
+    if (state.buyId) {
+      const totalAmount = mode === 'allocate' ? parseFloat(state.allocateTotalAmount) || 0 : undefined;
+      await saveCostMode(mode, totalAmount);
+    }
   };
 
   // Set allocate total
-  const setAllocateTotalAmount = (amount: string) => {
+  const setAllocateTotalAmount = async (amount: string) => {
     dispatch({type: 'SET_ALLOCATE_TOTAL', payload: amount});
+    // Auto-save to server (debounced would be better, but keeping it simple)
+  };
+
+  // Save allocate total on blur
+  const handleAllocateTotalBlur = async () => {
+    if (state.buyId && state.costEntryMode === 'allocate') {
+      const totalAmount = parseFloat(state.allocateTotalAmount) || 0;
+      await saveCostMode(state.costEntryMode, totalAmount);
+    }
   };
 
   // Close item modal
@@ -80,7 +106,7 @@ const Step3ItemsScreen: React.FC = () => {
   };
 
   // Save item
-  const handleSaveItem = () => {
+  const handleSaveItem = async () => {
     if (!itemName.trim()) {
       Toast.show({type: 'error', text1: 'Item name is required'});
       return;
@@ -94,18 +120,29 @@ const Step3ItemsScreen: React.FC = () => {
     const cost = parseFloat(itemCost) || 0;
     const qty = parseInt(itemQuantity) || 1;
 
+    setIsSavingItem(true);
+
     if (editingItem) {
-      dispatch({
-        type: 'UPDATE_ITEM',
-        payload: {
-          ...editingItem,
-          name: itemName,
-          quantity: qty,
-          condition: itemCondition,
-          cost_basis: cost,
-          sell_price: sellPrice,
-        },
-      });
+      const updatedItem: LocalBuyItem = {
+        ...editingItem,
+        name: itemName,
+        quantity: qty,
+        condition: itemCondition,
+        cost_basis: cost,
+        sell_price: sellPrice,
+      };
+
+      // Update locally first
+      dispatch({type: 'UPDATE_ITEM', payload: updatedItem});
+
+      // Update on server if has server ID
+      if (updatedItem.serverId) {
+        const success = await updateItemOnServer(updatedItem);
+        if (!success) {
+          setIsSavingItem(false);
+          return;
+        }
+      }
     } else {
       const newItem: LocalBuyItem = {
         localId: `item_${Date.now()}`,
@@ -115,13 +152,46 @@ const Step3ItemsScreen: React.FC = () => {
         cost_basis: cost,
         sell_price: sellPrice,
       };
+
+      // Add locally first
       dispatch({type: 'ADD_ITEM', payload: newItem});
+
+      // Add to server
+      if (state.buyId) {
+        const result = await addItemToServer(newItem);
+        if (result.success && result.serverId) {
+          // Update with server ID
+          dispatch({
+            type: 'SET_ITEM_SERVER_ID',
+            payload: {localId: newItem.localId, serverId: result.serverId},
+          });
+        } else if (!result.success) {
+          // Remove from local state if server failed
+          dispatch({type: 'REMOVE_ITEM', payload: newItem.localId});
+          setIsSavingItem(false);
+          return;
+        }
+      }
     }
+
+    setIsSavingItem(false);
     closeItemModal();
   };
 
   // Remove item
-  const removeItem = (localId: string) => {
+  const removeItem = async (localId: string) => {
+    const item = state.items.find(i => i.localId === localId);
+    if (!item) return;
+
+    // Delete from server first if has server ID
+    if (item.serverId) {
+      const success = await deleteItemFromServer(item);
+      if (!success) {
+        return; // Don't remove locally if server delete failed
+      }
+    }
+
+    // Remove locally
     dispatch({type: 'REMOVE_ITEM', payload: localId});
   };
 
@@ -233,6 +303,7 @@ const Step3ItemsScreen: React.FC = () => {
                   placeholderTextColor={COLORS.textMuted}
                   value={state.allocateTotalAmount}
                   onChangeText={setAllocateTotalAmount}
+                  onBlur={handleAllocateTotalBlur}
                   keyboardType="decimal-pad"
                 />
               </View>
@@ -494,14 +565,21 @@ const Step3ItemsScreen: React.FC = () => {
           </View>
 
           {/* Save Button */}
-          <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveItem}>
-            <Icon
-              source={editingItem ? 'check-circle' : 'plus-circle'}
-              size={22}
-              color={COLORS.white}
-            />
+          <TouchableOpacity
+            style={[styles.modalSaveBtn, isSavingItem && styles.modalSaveBtnDisabled]}
+            onPress={handleSaveItem}
+            disabled={isSavingItem}>
+            {isSavingItem ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Icon
+                source={editingItem ? 'check-circle' : 'plus-circle'}
+                size={22}
+                color={COLORS.white}
+              />
+            )}
             <Text style={styles.modalSaveBtnText}>
-              {editingItem ? 'Update Item' : 'Add Item'}
+              {isSavingItem ? 'Saving...' : editingItem ? 'Update Item' : 'Add Item'}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -1047,6 +1125,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl,
     marginTop: SPACING.sm,
     gap: SPACING.sm,
+  },
+  modalSaveBtnDisabled: {
+    opacity: 0.7,
   },
   modalSaveBtnText: {
     color: COLORS.white,

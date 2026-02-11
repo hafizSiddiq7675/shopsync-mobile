@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,17 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, CommonActions} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import {COLORS, SPACING, RADIUS} from '@constants/theme';
 import {BuyWizardStackParamList} from '@types';
 import {useBuyWizard} from '@contexts/BuyWizardContext';
-import {StepIndicator, WizardFooter} from '@components/buy-wizard';
-// TODO: Re-enable API integration later
-// import {createBuy, updateBuy, completeBuy} from '@services/buyService';
+import {StepIndicator} from '@components/buy-wizard';
 
 type NavigationProp = NativeStackNavigationProp<BuyWizardStackParamList, 'Step4Review'>;
 
@@ -34,7 +33,14 @@ const Step4ReviewScreen: React.FC = () => {
     totalPayments,
     remainingAmount,
     getItemCostBasis,
+    saveAsDraft,
+    saveAsPending,
+    completeBuyTransaction,
   } = useBuyWizard();
+
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isSavingPending, setIsSavingPending] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // Get condition label
   const getConditionLabel = (condition: string): string => {
@@ -49,9 +55,49 @@ const Step4ReviewScreen: React.FC = () => {
     return labels[condition] || condition;
   };
 
-  // Handle submit - TODO: Add API integration later
-  const handleSubmit = () => {
-    // Basic validation
+  // Handle Save as Draft
+  const handleSaveDraft = async () => {
+    setIsSavingDraft(true);
+    const success = await saveAsDraft();
+    setIsSavingDraft(false);
+
+    if (success) {
+      dispatch({type: 'RESET'});
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{name: 'BuyList' as any}],
+        })
+      );
+    }
+  };
+
+  // Handle Save as Pending
+  const handleSavePending = async () => {
+    // Validate customer for pending
+    if (!state.customer && !state.newCustomer) {
+      Toast.show({type: 'error', text1: 'Customer is required for pending status'});
+      return;
+    }
+
+    setIsSavingPending(true);
+    const success = await saveAsPending();
+    setIsSavingPending(false);
+
+    if (success) {
+      dispatch({type: 'RESET'});
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{name: 'BuyList' as any}],
+        })
+      );
+    }
+  };
+
+  // Handle Complete Buy
+  const handleComplete = async () => {
+    // Full validation
     if (!state.customer && !state.newCustomer) {
       Toast.show({type: 'error', text1: 'Customer is required'});
       return;
@@ -64,19 +110,22 @@ const Step4ReviewScreen: React.FC = () => {
       Toast.show({type: 'error', text1: 'At least one payment is required'});
       return;
     }
-    if (!state.createdBy?.trim()) {
-      Toast.show({type: 'error', text1: 'Created By is required'});
-      return;
-    }
 
-    // Skip API integration for now - just navigate to complete
-    navigation.navigate('Step5Complete');
+    setIsCompleting(true);
+    const success = await completeBuyTransaction();
+    setIsCompleting(false);
+
+    if (success) {
+      navigation.navigate('Step5Complete');
+    }
   };
 
   // Navigation
   const handleBack = () => {
     navigation.goBack();
   };
+
+  const isAnyLoading = isSavingDraft || isSavingPending || isCompleting;
 
   // Edit handlers - navigate back to specific step
   const handleEditCustomer = () => {
@@ -392,13 +441,66 @@ const Step4ReviewScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Footer */}
-        <WizardFooter
-          onBack={handleBack}
-          onNext={handleSubmit}
-          nextLabel="Complete Buy"
-          nextVariant="success"
-        />
+        {/* Action Buttons */}
+        <View style={styles.actionButtonsContainer}>
+          {/* Top Row: Save Draft and Save Pending */}
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnDraft]}
+              onPress={handleSaveDraft}
+              disabled={isAnyLoading}
+              activeOpacity={0.8}>
+              {isSavingDraft ? (
+                <ActivityIndicator size="small" color={COLORS.orange} />
+              ) : (
+                <Icon source="content-save-outline" size={20} color={COLORS.orange} />
+              )}
+              <Text style={styles.actionBtnDraftText}>
+                {isSavingDraft ? 'Saving...' : 'Save Draft'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnPending]}
+              onPress={handleSavePending}
+              disabled={isAnyLoading}
+              activeOpacity={0.8}>
+              {isSavingPending ? (
+                <ActivityIndicator size="small" color={COLORS.purple} />
+              ) : (
+                <Icon source="clock-outline" size={20} color={COLORS.purple} />
+              )}
+              <Text style={styles.actionBtnPendingText}>
+                {isSavingPending ? 'Saving...' : 'Save Pending'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom Row: Complete Buy */}
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnComplete, isAnyLoading && styles.actionBtnDisabled]}
+            onPress={handleComplete}
+            disabled={isAnyLoading}
+            activeOpacity={0.8}>
+            {isCompleting ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <Icon source="check-circle" size={22} color={COLORS.white} />
+            )}
+            <Text style={styles.actionBtnCompleteText}>
+              {isCompleting ? 'Completing...' : 'Complete Buy'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Back Button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleBack}
+          disabled={isAnyLoading}>
+          <Icon source="arrow-left" size={20} color={COLORS.textSecondary} />
+          <Text style={styles.backButtonText}>Back to Items</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -843,6 +945,69 @@ const styles = StyleSheet.create({
   profitValue: {
     fontSize: 22,
     fontWeight: '700',
+  },
+  // Action Buttons
+  actionButtonsContainer: {
+    marginTop: SPACING.lg,
+    gap: SPACING.md,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    gap: SPACING.xs,
+    height: 50,
+  },
+  actionBtnDraft: {
+    backgroundColor: COLORS.orange + '15',
+    borderWidth: 1,
+    borderColor: COLORS.orange + '40',
+  },
+  actionBtnDraftText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.orange,
+  },
+  actionBtnPending: {
+    backgroundColor: COLORS.purple + '15',
+    borderWidth: 1,
+    borderColor: COLORS.purple + '40',
+  },
+  actionBtnPendingText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.purple,
+  },
+  actionBtnComplete: {
+    backgroundColor: COLORS.green,
+    height: 54,
+  },
+  actionBtnCompleteText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  actionBtnDisabled: {
+    opacity: 0.6,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  backButtonText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
   },
 });
 

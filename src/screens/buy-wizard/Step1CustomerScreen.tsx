@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
+import {useNavigation, useRoute, RouteProp, CommonActions} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import Toast from 'react-native-toast-message';
@@ -19,31 +19,61 @@ import {getBuyById} from '@services/buyService';
 import {useBuyWizard, LocalBuyItem, LocalPayment} from '@contexts/BuyWizardContext';
 import {StepIndicator, WizardFooter} from '@components/buy-wizard';
 import DraggableBottomSheet from '@components/DraggableBottomSheet';
-import {BuyWizardStackParamList, BuyStackParamList} from '@types';
+import {BuyWizardStackParamList} from '@types';
 
 type NavigationProp = NativeStackNavigationProp<BuyWizardStackParamList, 'Step1Customer'>;
-type BuyWizardRouteProp = RouteProp<BuyStackParamList, 'BuyWizard'>;
+type Step1RouteProp = RouteProp<BuyWizardStackParamList, 'Step1Customer'>;
 
 const STEP_LABELS = ['Customer', 'Payment', 'Items', 'Review', 'Complete'];
 
 const Step1CustomerScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<BuyWizardRouteProp>();
-  const {state, dispatch} = useBuyWizard();
+  const route = useRoute<Step1RouteProp>();
+  const {state, dispatch, createDraft, saveCustomer, saveAsDraft} = useBuyWizard();
   const buyId = route.params?.buyId;
   const [isLoadingBuy, setIsLoadingBuy] = useState(false);
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
-  // Load existing buy data for edit mode
+  // Initialize buy on mount
   useEffect(() => {
-    if (buyId && !state.isEditing) {
-      loadExistingBuy(buyId);
-    }
+    const initBuy = async () => {
+      // If editing a different buy than what's in context, reset first
+      if (buyId && state.buyId && state.buyId !== buyId) {
+        dispatch({type: 'RESET'});
+      }
+
+      if (buyId) {
+        // Edit mode - load existing buy
+        if (!state.isEditing || state.buyId !== buyId) {
+          loadExistingBuy(buyId);
+        }
+      } else if (!state.buyId) {
+        // New buy mode - create draft
+        setIsCreatingDraft(true);
+        const success = await createDraft();
+        setIsCreatingDraft(false);
+        if (!success) {
+          navigation.goBack();
+        }
+      }
+    };
+    initBuy();
   }, [buyId]);
 
   const loadExistingBuy = async (id: number) => {
     setIsLoadingBuy(true);
     const buy = await getBuyById(id);
     if (buy) {
+      // Set buy info
+      dispatch({
+        type: 'SET_BUY_INFO',
+        payload: {
+          buyId: buy.id,
+          buyNumber: buy.buy_number,
+          status: buy.status,
+        },
+      });
+
       // Set editing state
       dispatch({type: 'SET_EXISTING_BUY', payload: {buyId: id, isEditing: true}});
 
@@ -62,9 +92,10 @@ const Step1CustomerScreen: React.FC = () => {
         });
       }
 
-      // Set items
+      // Set items with server IDs
       const items: LocalBuyItem[] = buy.items.map(item => ({
         localId: `existing-${item.id}`,
+        serverId: item.id,
         name: item.name,
         quantity: item.quantity,
         condition: item.condition,
@@ -76,6 +107,11 @@ const Step1CustomerScreen: React.FC = () => {
 
       // Set cost entry mode
       dispatch({type: 'SET_COST_ENTRY_MODE', payload: buy.cost_entry_mode});
+
+      // Set allocate total amount if in allocate mode
+      if (buy.cost_entry_mode === 'allocate' && buy.total_buy_amount > 0) {
+        dispatch({type: 'SET_ALLOCATE_TOTAL', payload: buy.total_buy_amount.toString()});
+      }
 
       // Set payments
       const payments: LocalPayment[] = buy.payments.map(payment => ({
@@ -121,19 +157,29 @@ const Step1CustomerScreen: React.FC = () => {
   }, []);
 
   // Select customer
-  const handleSelectCustomer = (customer: CustomerSearchResult) => {
+  const handleSelectCustomer = async (customer: CustomerSearchResult) => {
     dispatch({type: 'SET_CUSTOMER', payload: customer});
     setCustomerModalVisible(false);
     setCustomerSearch('');
     setCustomerResults([]);
+
+    // Auto-save customer to server
+    if (state.buyId) {
+      await saveCustomer(customer.id);
+    }
   };
 
   // Remove customer
-  const handleRemoveCustomer = () => {
+  const handleRemoveCustomer = async () => {
     if (state.customer) {
       dispatch({type: 'SET_CUSTOMER', payload: null});
     } else if (state.newCustomer) {
       dispatch({type: 'SET_NEW_CUSTOMER', payload: null});
+    }
+
+    // Auto-save (remove customer from server)
+    if (state.buyId) {
+      await saveCustomer(null);
     }
   };
 
@@ -216,10 +262,58 @@ const Step1CustomerScreen: React.FC = () => {
     navigation.navigate('Step2Payment');
   };
 
-  // Go back
-  const handleBack = () => {
-    navigation.goBack();
+  // Handle save draft and exit
+  const handleSaveDraft = async () => {
+    const success = await saveAsDraft();
+    if (success) {
+      dispatch({type: 'RESET'});
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{name: 'BuyList' as any}],
+        })
+      );
+    }
   };
+
+  // Go back / Cancel
+  const handleBack = () => {
+    // If we have a draft, ask if they want to save or discard
+    if (state.buyId) {
+      // For now, just save and go back
+      handleSaveDraft();
+    } else {
+      dispatch({type: 'RESET'});
+      navigation.goBack();
+    }
+  };
+
+  // Get header title
+  const getHeaderTitle = () => {
+    if (state.buyNumber) {
+      return state.buyNumber;
+    }
+    return state.isEditing ? 'Edit Buy' : 'New Buy';
+  };
+
+  // Get status badge
+  const getStatusBadge = () => {
+    if (!state.status) return null;
+    const statusColors: Record<string, string> = {
+      draft: COLORS.orange,
+      pending: COLORS.purple,
+      completed: COLORS.green,
+    };
+    return (
+      <View style={[styles.statusBadge, {backgroundColor: statusColors[state.status] + '20'}]}>
+        <Text style={[styles.statusBadgeText, {color: statusColors[state.status]}]}>
+          {state.status.charAt(0).toUpperCase() + state.status.slice(1)}
+        </Text>
+      </View>
+    );
+  };
+
+  const isLoading = isLoadingBuy || isCreatingDraft;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -228,17 +322,41 @@ const Step1CustomerScreen: React.FC = () => {
         <TouchableOpacity style={styles.closeButton} onPress={handleBack}>
           <Icon source="close" size={24} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{state.isEditing ? 'Edit Buy' : 'New Buy'}</Text>
-        <View style={styles.headerSpacer} />
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+          {getStatusBadge()}
+        </View>
+        {state.buyId && (
+          <TouchableOpacity style={styles.saveDraftButton} onPress={handleSaveDraft}>
+            <Icon source="content-save-outline" size={20} color={COLORS.purple} />
+          </TouchableOpacity>
+        )}
+        {!state.buyId && <View style={styles.headerSpacer} />}
       </View>
+
+      {/* Auto-save indicator */}
+      {state.isSaving && (
+        <View style={styles.savingIndicator}>
+          <ActivityIndicator size="small" color={COLORS.purple} />
+          <Text style={styles.savingText}>Saving...</Text>
+        </View>
+      )}
+      {state.lastSavedAt && !state.isSaving && (
+        <View style={styles.savedIndicator}>
+          <Icon source="check-circle" size={14} color={COLORS.green} />
+          <Text style={styles.savedText}>Auto-saved</Text>
+        </View>
+      )}
 
       {/* Step Indicator */}
       <StepIndicator currentStep={1} totalSteps={5} labels={STEP_LABELS} />
 
-      {isLoadingBuy ? (
+      {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.purple} />
-          <Text style={styles.loadingText}>Loading buy data...</Text>
+          <Text style={styles.loadingText}>
+            {isCreatingDraft ? 'Creating draft...' : 'Loading buy data...'}
+          </Text>
         </View>
       ) : (
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -462,6 +580,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
@@ -469,6 +594,46 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  saveDraftButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.purple + '20',
+    borderRadius: RADIUS.md,
+  },
+  statusBadge: {
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  savingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  savingText: {
+    fontSize: 12,
+    color: COLORS.purple,
+  },
+  savedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  savedText: {
+    fontSize: 12,
+    color: COLORS.green,
   },
   loadingContainer: {
     flex: 1,
@@ -485,7 +650,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: SPACING.md,
-    paddingBottom: 80, // Account for tab bar
+    paddingBottom: 80,
   },
   title: {
     fontSize: 24,

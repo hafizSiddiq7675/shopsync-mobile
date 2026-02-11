@@ -88,7 +88,7 @@ export type BuyStackParamList = {
 
 // Buy Wizard Stack Navigation types (nested in BuyStack)
 export type BuyWizardStackParamList = {
-  Step1Customer: undefined;
+  Step1Customer: {buyId?: number} | undefined;
   Step2Payment: undefined;
   Step3Items: undefined;
   Step4Review: undefined;
@@ -169,10 +169,11 @@ export interface CreateBuyPayload {
     phone?: string;
     note?: string;
   };
-  cost_entry_mode: CostEntryMode;
-  items: CreateBuyItemPayload[];
-  payments: CreateBuyPaymentPayload[];
+  cost_entry_mode?: CostEntryMode;
+  items?: CreateBuyItemPayload[];
+  payments?: CreateBuyPaymentPayload[];
   notes?: string;
+  total_buy_amount?: number;
 }
 
 export interface BuyListResponse {

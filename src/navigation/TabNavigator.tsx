@@ -42,11 +42,18 @@ const SaleStackNavigator: React.FC = () => {
 };
 
 // Buy Wizard Navigator (wrapped with provider)
-const BuyWizardNavigator: React.FC = () => {
+// Receives buyId from parent route and passes to Step1Customer
+const BuyWizardNavigator: React.FC<{route?: {params?: {buyId?: number}}}> = ({route}) => {
+  const buyId = route?.params?.buyId;
+
   return (
     <BuyWizardProvider>
       <BuyWizardStack.Navigator screenOptions={{headerShown: false}}>
-        <BuyWizardStack.Screen name="Step1Customer" component={Step1CustomerScreen} />
+        <BuyWizardStack.Screen
+          name="Step1Customer"
+          component={Step1CustomerScreen}
+          initialParams={{buyId}}
+        />
         <BuyWizardStack.Screen name="Step2Payment" component={Step2PaymentScreen} />
         <BuyWizardStack.Screen name="Step3Items" component={Step3ItemsScreen} />
         <BuyWizardStack.Screen name="Step4Review" component={Step4ReviewScreen} />

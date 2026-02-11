@@ -1,10 +1,24 @@
-import React, {createContext, useContext, useReducer, ReactNode} from 'react';
+import React, {createContext, useContext, useReducer, ReactNode, useCallback} from 'react';
 import {CostEntryMode, ItemCondition} from '@types';
 import {CustomerSearchResult} from '@services/customerService';
+import {
+  createBuy,
+  updateBuy,
+  addBuyItem,
+  updateBuyItem,
+  deleteBuyItem,
+  updateBuyPayments,
+  saveBuyAsPending,
+  completeBuy,
+  BuyItemPayload,
+  BuyPaymentPayload,
+} from '@services/buyService';
+import Toast from 'react-native-toast-message';
 
 // Types
 export interface LocalBuyItem {
   localId: string;
+  serverId?: number; // Server ID for updates/deletes
   name: string;
   quantity: number;
   condition: ItemCondition;
@@ -28,6 +42,11 @@ export interface NewCustomerData {
 }
 
 export interface BuyWizardState {
+  // Buy identification
+  buyId: number | null;
+  buyNumber: string | null;
+  status: 'draft' | 'pending' | 'completed' | null;
+
   // Step 1: Customer
   customer: CustomerSearchResult | null;
   newCustomer: NewCustomerData | null;
@@ -40,23 +59,27 @@ export interface BuyWizardState {
   // Step 3: Payment
   payments: LocalPayment[];
 
-  // Step 5: Complete
+  // Step 4: Review
   createdBy: string;
   notes: string;
 
-  // Editing state
-  existingBuyId: number | null;
+  // State flags
   isEditing: boolean;
+  isLoading: boolean;
+  isSaving: boolean;
+  lastSavedAt: Date | null;
 }
 
 // Action types
 type BuyWizardAction =
+  | {type: 'SET_BUY_INFO'; payload: {buyId: number; buyNumber: string; status?: string}}
   | {type: 'SET_CUSTOMER'; payload: CustomerSearchResult | null}
   | {type: 'SET_NEW_CUSTOMER'; payload: NewCustomerData | null}
   | {type: 'ADD_ITEM'; payload: LocalBuyItem}
   | {type: 'UPDATE_ITEM'; payload: LocalBuyItem}
   | {type: 'REMOVE_ITEM'; payload: string}
   | {type: 'SET_ITEMS'; payload: LocalBuyItem[]}
+  | {type: 'SET_ITEM_SERVER_ID'; payload: {localId: string; serverId: number}}
   | {type: 'SET_COST_ENTRY_MODE'; payload: CostEntryMode}
   | {type: 'SET_ALLOCATE_TOTAL'; payload: string}
   | {type: 'ADD_PAYMENT'; payload: LocalPayment}
@@ -65,10 +88,17 @@ type BuyWizardAction =
   | {type: 'SET_CREATED_BY'; payload: string}
   | {type: 'SET_NOTES'; payload: string}
   | {type: 'SET_EXISTING_BUY'; payload: {buyId: number; isEditing: boolean}}
+  | {type: 'SET_LOADING'; payload: boolean}
+  | {type: 'SET_SAVING'; payload: boolean}
+  | {type: 'SET_LAST_SAVED'; payload: Date}
+  | {type: 'SET_STATUS'; payload: 'draft' | 'pending' | 'completed'}
   | {type: 'RESET'};
 
 // Initial state
 const initialState: BuyWizardState = {
+  buyId: null,
+  buyNumber: null,
+  status: null,
   customer: null,
   newCustomer: null,
   items: [],
@@ -77,13 +107,22 @@ const initialState: BuyWizardState = {
   payments: [],
   createdBy: '',
   notes: '',
-  existingBuyId: null,
   isEditing: false,
+  isLoading: false,
+  isSaving: false,
+  lastSavedAt: null,
 };
 
 // Reducer
 function buyWizardReducer(state: BuyWizardState, action: BuyWizardAction): BuyWizardState {
   switch (action.type) {
+    case 'SET_BUY_INFO':
+      return {
+        ...state,
+        buyId: action.payload.buyId,
+        buyNumber: action.payload.buyNumber,
+        status: (action.payload.status as any) || 'draft',
+      };
     case 'SET_CUSTOMER':
       return {...state, customer: action.payload, newCustomer: null};
     case 'SET_NEW_CUSTOMER':
@@ -101,6 +140,15 @@ function buyWizardReducer(state: BuyWizardState, action: BuyWizardAction): BuyWi
       return {...state, items: state.items.filter(item => item.localId !== action.payload)};
     case 'SET_ITEMS':
       return {...state, items: action.payload};
+    case 'SET_ITEM_SERVER_ID':
+      return {
+        ...state,
+        items: state.items.map(item =>
+          item.localId === action.payload.localId
+            ? {...item, serverId: action.payload.serverId}
+            : item
+        ),
+      };
     case 'SET_COST_ENTRY_MODE':
       return {...state, costEntryMode: action.payload};
     case 'SET_ALLOCATE_TOTAL':
@@ -116,7 +164,15 @@ function buyWizardReducer(state: BuyWizardState, action: BuyWizardAction): BuyWi
     case 'SET_NOTES':
       return {...state, notes: action.payload};
     case 'SET_EXISTING_BUY':
-      return {...state, existingBuyId: action.payload.buyId, isEditing: action.payload.isEditing};
+      return {...state, buyId: action.payload.buyId, isEditing: action.payload.isEditing};
+    case 'SET_LOADING':
+      return {...state, isLoading: action.payload};
+    case 'SET_SAVING':
+      return {...state, isSaving: action.payload};
+    case 'SET_LAST_SAVED':
+      return {...state, lastSavedAt: action.payload};
+    case 'SET_STATUS':
+      return {...state, status: action.payload};
     case 'RESET':
       return initialState;
     default:
@@ -135,6 +191,18 @@ interface BuyWizardContextType {
   totalPayments: number;
   remainingAmount: number;
   getItemCostBasis: (item: LocalBuyItem) => number;
+  // API functions
+  createDraft: () => Promise<boolean>;
+  saveCustomer: (customerId: number | null) => Promise<boolean>;
+  saveCostMode: (mode: CostEntryMode, totalAmount?: number) => Promise<boolean>;
+  saveNotes: (notes: string) => Promise<boolean>;
+  addItemToServer: (item: LocalBuyItem) => Promise<{success: boolean; serverId?: number}>;
+  updateItemOnServer: (item: LocalBuyItem) => Promise<boolean>;
+  deleteItemFromServer: (item: LocalBuyItem) => Promise<boolean>;
+  savePayments: (payments: LocalPayment[]) => Promise<boolean>;
+  saveAsDraft: () => Promise<boolean>;
+  saveAsPending: () => Promise<boolean>;
+  completeBuyTransaction: () => Promise<boolean>;
 }
 
 const BuyWizardContext = createContext<BuyWizardContextType | undefined>(undefined);
@@ -173,6 +241,294 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
   const totalPayments = state.payments.reduce((sum, p) => sum + p.amount, 0);
   const remainingAmount = totalBuyAmount - totalPayments;
 
+  // API Functions
+
+  // Create draft buy
+  const createDraft = useCallback(async (): Promise<boolean> => {
+    if (state.buyId) return true; // Already has a buy ID
+
+    dispatch({type: 'SET_LOADING', payload: true});
+    try {
+      const result = await createBuy({});
+      if (result.success && result.data) {
+        dispatch({
+          type: 'SET_BUY_INFO',
+          payload: {
+            buyId: result.data.id,
+            buyNumber: result.data.buy_number,
+            status: result.data.status,
+          },
+        });
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      Toast.show({type: 'error', text1: result.message || 'Failed to create draft'});
+      return false;
+    } catch (error) {
+      Toast.show({type: 'error', text1: 'Failed to create draft'});
+      return false;
+    } finally {
+      dispatch({type: 'SET_LOADING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Save customer selection
+  const saveCustomer = useCallback(async (customerId: number | null): Promise<boolean> => {
+    if (!state.buyId) return false;
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const result = await updateBuy(state.buyId, {customer_id: customerId ?? undefined});
+      if (result.success) {
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      return false;
+    } catch (error) {
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Save cost entry mode
+  const saveCostMode = useCallback(async (mode: CostEntryMode, totalAmount?: number): Promise<boolean> => {
+    if (!state.buyId) return false;
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const result = await updateBuy(state.buyId, {
+        cost_entry_mode: mode,
+        total_buy_amount: totalAmount,
+      });
+      if (result.success) {
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      return false;
+    } catch (error) {
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Save notes
+  const saveNotes = useCallback(async (notes: string): Promise<boolean> => {
+    if (!state.buyId) return false;
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const result = await updateBuy(state.buyId, {notes});
+      if (result.success) {
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      return false;
+    } catch (error) {
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Add item to server
+  const addItemToServer = useCallback(async (item: LocalBuyItem): Promise<{success: boolean; serverId?: number}> => {
+    if (!state.buyId) return {success: false};
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const payload: BuyItemPayload = {
+        name: item.name,
+        quantity: item.quantity,
+        condition: item.condition,
+        sell_price: item.sell_price,
+        cost_basis: item.cost_basis,
+        sku: item.sku,
+      };
+      const result = await addBuyItem(state.buyId, payload);
+      if (result.success && result.data?.item) {
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return {success: true, serverId: result.data.item.id};
+      }
+      Toast.show({type: 'error', text1: result.message || 'Failed to add item'});
+      return {success: false};
+    } catch (error) {
+      Toast.show({type: 'error', text1: 'Failed to add item'});
+      return {success: false};
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Update item on server
+  const updateItemOnServer = useCallback(async (item: LocalBuyItem): Promise<boolean> => {
+    if (!state.buyId || !item.serverId) return false;
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const payload: Partial<BuyItemPayload> = {
+        name: item.name,
+        quantity: item.quantity,
+        condition: item.condition,
+        sell_price: item.sell_price,
+        cost_basis: item.cost_basis,
+        sku: item.sku,
+      };
+      const result = await updateBuyItem(state.buyId, item.serverId, payload);
+      if (result.success) {
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      Toast.show({type: 'error', text1: result.message || 'Failed to update item'});
+      return false;
+    } catch (error) {
+      Toast.show({type: 'error', text1: 'Failed to update item'});
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Delete item from server
+  const deleteItemFromServer = useCallback(async (item: LocalBuyItem): Promise<boolean> => {
+    if (!state.buyId || !item.serverId) return true; // No server ID means not saved yet
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const result = await deleteBuyItem(state.buyId, item.serverId);
+      if (result.success) {
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      Toast.show({type: 'error', text1: result.message || 'Failed to delete item'});
+      return false;
+    } catch (error) {
+      Toast.show({type: 'error', text1: 'Failed to delete item'});
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Save payments to server
+  const savePayments = useCallback(async (payments: LocalPayment[]): Promise<boolean> => {
+    if (!state.buyId) return false;
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const paymentPayloads: BuyPaymentPayload[] = payments.map(p => ({
+        method_id: p.payment_method_id,
+        amount: p.amount,
+      }));
+      const result = await updateBuyPayments(state.buyId, paymentPayloads);
+      if (result.success) {
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      return false;
+    } catch (error) {
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId]);
+
+  // Save as draft (just updates status display, already saved)
+  const saveAsDraft = useCallback(async (): Promise<boolean> => {
+    if (!state.buyId) return false;
+    // Draft is already auto-saved, just return success
+    Toast.show({type: 'success', text1: 'Draft saved'});
+    return true;
+  }, [state.buyId]);
+
+  // Save as pending
+  const saveAsPending = useCallback(async (): Promise<boolean> => {
+    if (!state.buyId) return false;
+
+    // Validate customer is selected
+    if (!state.customer && !state.newCustomer) {
+      Toast.show({type: 'error', text1: 'Customer is required for pending status'});
+      return false;
+    }
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const payments: BuyPaymentPayload[] = state.payments.map(p => ({
+        method_id: p.payment_method_id,
+        amount: p.amount,
+      }));
+
+      // Calculate store credit amount if any
+      const storeCreditPayment = state.payments.find(
+        p => p.payment_method_name?.toLowerCase().includes('store credit')
+      );
+      const storeCreditAmount = storeCreditPayment?.amount || 0;
+
+      const result = await saveBuyAsPending(state.buyId, payments, storeCreditAmount);
+      if (result.success) {
+        dispatch({type: 'SET_STATUS', payload: 'pending'});
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        Toast.show({type: 'success', text1: 'Saved as pending'});
+        return true;
+      }
+      Toast.show({type: 'error', text1: result.message || 'Failed to save as pending'});
+      return false;
+    } catch (error) {
+      Toast.show({type: 'error', text1: 'Failed to save as pending'});
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId, state.customer, state.newCustomer, state.payments]);
+
+  // Complete buy transaction
+  const completeBuyTransaction = useCallback(async (): Promise<boolean> => {
+    if (!state.buyId) return false;
+
+    // Validations
+    if (!state.customer && !state.newCustomer) {
+      Toast.show({type: 'error', text1: 'Customer is required'});
+      return false;
+    }
+    if (state.items.length === 0) {
+      Toast.show({type: 'error', text1: 'At least one item is required'});
+      return false;
+    }
+    if (totalBuyAmount > 0 && state.payments.length === 0) {
+      Toast.show({type: 'error', text1: 'At least one payment is required'});
+      return false;
+    }
+
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      const payments: BuyPaymentPayload[] = state.payments.map(p => ({
+        method_id: p.payment_method_id,
+        amount: p.amount,
+      }));
+
+      // Calculate store credit amount if any
+      const storeCreditPayment = state.payments.find(
+        p => p.payment_method_name?.toLowerCase().includes('store credit')
+      );
+      const storeCreditAmount = storeCreditPayment?.amount || 0;
+
+      const result = await completeBuy(state.buyId, payments, storeCreditAmount);
+      if (result.success) {
+        dispatch({type: 'SET_STATUS', payload: 'completed'});
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+        return true;
+      }
+      Toast.show({type: 'error', text1: result.message || 'Failed to complete buy'});
+      return false;
+    } catch (error) {
+      Toast.show({type: 'error', text1: 'Failed to complete buy'});
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
+    }
+  }, [state.buyId, state.customer, state.newCustomer, state.items, state.payments, totalBuyAmount]);
+
   return (
     <BuyWizardContext.Provider
       value={{
@@ -184,6 +540,18 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
         totalPayments,
         remainingAmount,
         getItemCostBasis,
+        // API functions
+        createDraft,
+        saveCustomer,
+        saveCostMode,
+        saveNotes,
+        addItemToServer,
+        updateItemOnServer,
+        deleteItemFromServer,
+        savePayments,
+        saveAsDraft,
+        saveAsPending,
+        completeBuyTransaction,
       }}>
       {children}
     </BuyWizardContext.Provider>
@@ -197,6 +565,18 @@ export const useBuyWizard = (): BuyWizardContextType => {
     throw new Error('useBuyWizard must be used within a BuyWizardProvider');
   }
   return context;
+};
+
+// Legacy support - existingBuyId maps to buyId
+export const useBuyWizardLegacy = () => {
+  const context = useBuyWizard();
+  return {
+    ...context,
+    state: {
+      ...context.state,
+      existingBuyId: context.state.buyId,
+    },
+  };
 };
 
 export default BuyWizardContext;

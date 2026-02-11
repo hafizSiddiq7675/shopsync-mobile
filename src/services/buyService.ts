@@ -29,6 +29,8 @@ const parseBuy = (buy: any): Buy => ({
   })),
   payments: (buy.payments || []).map((payment: any) => ({
     ...payment,
+    // Handle both payment_method_id and method_id from API
+    payment_method_id: parseInt(payment.payment_method_id || payment.method_id) || 0,
     amount: parseFloat(payment.amount) || 0,
   })),
 });
@@ -53,7 +55,10 @@ export const getBuys = async (params?: BuyListParams): Promise<BuyListResponse> 
 export const getBuyById = async (id: number): Promise<Buy | null> => {
   try {
     const response = await api.get(`/buys/${id}`);
-    return parseBuy(response.data.data || response.data);
+    const rawData = response.data.data || response.data;
+    // Debug: log raw payments from API
+    console.log('Raw payments from API:', JSON.stringify(rawData.payments));
+    return parseBuy(rawData);
   } catch (error) {
     console.error('Error fetching buy:', error);
     return null;
@@ -97,13 +102,135 @@ export const updateBuy = async (
   }
 };
 
-// Save buy as pending
-export const saveBuyAsPending = async (id: number): Promise<{success: boolean; message?: string}> => {
+// Item payload type
+export interface BuyItemPayload {
+  name: string;
+  quantity: number;
+  condition: string;
+  sell_price: number;
+  cost_basis?: number;
+  sku?: string;
+}
+
+// Payment payload type
+export interface BuyPaymentPayload {
+  method_id: number | string;
+  amount: number;
+}
+
+// Add item to buy
+export const addBuyItem = async (
+  buyId: number,
+  item: BuyItemPayload
+): Promise<{success: boolean; data?: any; message?: string}> => {
   try {
-    await api.post(`/buys/${id}/pending`);
-    return {success: true};
+    const response = await api.post(`/buys/${buyId}/items`, item);
+    return {
+      success: true,
+      data: response.data.data,
+    };
+  } catch (error: any) {
+    console.error('Error adding item to buy:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to add item',
+    };
+  }
+};
+
+// Update item in buy
+export const updateBuyItem = async (
+  buyId: number,
+  itemId: number,
+  item: Partial<BuyItemPayload>
+): Promise<{success: boolean; data?: any; message?: string}> => {
+  try {
+    const response = await api.put(`/buys/${buyId}/items/${itemId}`, item);
+    return {
+      success: true,
+      data: response.data.data,
+    };
+  } catch (error: any) {
+    console.error('Error updating item:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to update item',
+    };
+  }
+};
+
+// Delete item from buy
+export const deleteBuyItem = async (
+  buyId: number,
+  itemId: number
+): Promise<{success: boolean; data?: any; message?: string}> => {
+  try {
+    const response = await api.delete(`/buys/${buyId}/items/${itemId}`);
+    return {
+      success: true,
+      data: response.data.data,
+    };
+  } catch (error: any) {
+    console.error('Error deleting item:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to delete item',
+    };
+  }
+};
+
+// Update buy payments (auto-save)
+export const updateBuyPayments = async (
+  buyId: number,
+  payments: BuyPaymentPayload[]
+): Promise<{success: boolean; data?: any; message?: string}> => {
+  try {
+    // Ensure payment amounts are numbers, not strings
+    const cleanedPayments = payments.map(p => ({
+      method_id: typeof p.method_id === 'string' ? parseInt(p.method_id as string) : p.method_id,
+      amount: typeof p.amount === 'string' ? parseFloat(p.amount as string) : p.amount,
+    }));
+
+    const response = await api.put(`/buys/${buyId}/payments`, {payments: cleanedPayments});
+    return {
+      success: true,
+      data: response.data.data,
+    };
+  } catch (error: any) {
+    console.error('Error updating payments:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to update payments',
+    };
+  }
+};
+
+// Save buy as pending with payments
+export const saveBuyAsPending = async (
+  id: number,
+  payments?: BuyPaymentPayload[],
+  storeCreditAmount?: number
+): Promise<{success: boolean; data?: any; message?: string}> => {
+  try {
+    // Ensure payment amounts are numbers, not strings
+    const cleanedPayments = payments?.map(p => ({
+      method_id: typeof p.method_id === 'string' ? parseInt(p.method_id as string) : p.method_id,
+      amount: typeof p.amount === 'string' ? parseFloat(p.amount as string) : p.amount,
+    }));
+
+    console.log('Saving buy as pending with payments:', JSON.stringify(cleanedPayments));
+
+    const response = await api.post(`/buys/${id}/pending`, {
+      payments: cleanedPayments,
+      store_credit_amount: storeCreditAmount,
+    });
+    return {
+      success: true,
+      data: response.data.data,
+    };
   } catch (error: any) {
     console.error('Error saving buy as pending:', error);
+    console.error('Error response data:', JSON.stringify(error.response?.data));
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to save as pending',
@@ -111,13 +238,30 @@ export const saveBuyAsPending = async (id: number): Promise<{success: boolean; m
   }
 };
 
-// Complete buy
-export const completeBuy = async (id: number): Promise<{success: boolean; message?: string}> => {
+// Complete buy with payments
+export const completeBuy = async (
+  id: number,
+  payments?: BuyPaymentPayload[],
+  storeCreditAmount?: number
+): Promise<{success: boolean; data?: any; message?: string}> => {
   try {
-    await api.post(`/buys/${id}/complete`);
-    return {success: true};
+    // Ensure payment amounts are numbers, not strings
+    const cleanedPayments = payments?.map(p => ({
+      method_id: typeof p.method_id === 'string' ? parseInt(p.method_id as string) : p.method_id,
+      amount: typeof p.amount === 'string' ? parseFloat(p.amount as string) : p.amount,
+    }));
+
+    const response = await api.post(`/buys/${id}/complete`, {
+      payments: cleanedPayments,
+      store_credit_amount: storeCreditAmount,
+    });
+    return {
+      success: true,
+      data: response.data.data,
+    };
   } catch (error: any) {
     console.error('Error completing buy:', error);
+    console.error('Error response data:', JSON.stringify(error.response?.data));
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to complete buy',

@@ -34,6 +34,7 @@ const Step2PaymentScreen: React.FC = () => {
     profit,
     totalPayments,
     remainingAmount,
+    savePayments,
   } = useBuyWizard();
 
   // Payment methods from API
@@ -88,7 +89,7 @@ const Step2PaymentScreen: React.FC = () => {
   };
 
   // Add payment
-  const handleAddPayment = () => {
+  const handleAddPayment = async () => {
     const amount = parseFloat(paymentAmount);
     if (!amount || amount <= 0) {
       Toast.show({type: 'error', text1: 'Please enter a valid amount'});
@@ -111,11 +112,23 @@ const Step2PaymentScreen: React.FC = () => {
     dispatch({type: 'ADD_PAYMENT', payload: newPayment});
     closePaymentModal();
     Toast.show({type: 'success', text1: 'Payment added'});
+
+    // Auto-save payments to server
+    if (state.buyId) {
+      const updatedPayments = [...state.payments, newPayment];
+      await savePayments(updatedPayments);
+    }
   };
 
   // Remove payment
-  const removePayment = (localId: string) => {
+  const removePayment = async (localId: string) => {
     dispatch({type: 'REMOVE_PAYMENT', payload: localId});
+
+    // Auto-save payments to server
+    if (state.buyId) {
+      const updatedPayments = state.payments.filter(p => p.localId !== localId);
+      await savePayments(updatedPayments);
+    }
   };
 
   // Navigation
@@ -147,6 +160,14 @@ const Step2PaymentScreen: React.FC = () => {
     return 'credit-card-outline';
   };
 
+  // Get header title
+  const getHeaderTitle = () => {
+    if (state.buyNumber) {
+      return state.buyNumber;
+    }
+    return 'Payment';
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -154,9 +175,25 @@ const Step2PaymentScreen: React.FC = () => {
         <TouchableOpacity style={styles.closeButton} onPress={handleBack}>
           <Icon source="arrow-left" size={24} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payment</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>{getHeaderTitle()}</Text>
+        </View>
         <View style={styles.headerSpacer} />
       </View>
+
+      {/* Auto-save indicator */}
+      {state.isSaving && (
+        <View style={styles.savingIndicator}>
+          <ActivityIndicator size="small" color={COLORS.purple} />
+          <Text style={styles.savingText}>Saving...</Text>
+        </View>
+      )}
+      {state.lastSavedAt && !state.isSaving && (
+        <View style={styles.savedIndicator}>
+          <Icon source="check-circle" size={14} color={COLORS.green} />
+          <Text style={styles.savedText}>Auto-saved</Text>
+        </View>
+      )}
 
       {/* Step Indicator */}
       <StepIndicator currentStep={2} totalSteps={5} labels={STEP_LABELS} />
@@ -404,6 +441,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
@@ -411,6 +455,28 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  savingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  savingText: {
+    fontSize: 12,
+    color: COLORS.purple,
+  },
+  savedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.xs,
+    gap: SPACING.xs,
+  },
+  savedText: {
+    fontSize: 12,
+    color: COLORS.green,
   },
   scrollView: {
     flex: 1,

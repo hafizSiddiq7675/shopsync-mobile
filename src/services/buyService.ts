@@ -85,7 +85,7 @@ export const createBuy = async (data: CreateBuyPayload): Promise<{success: boole
 // Update existing buy
 export const updateBuy = async (
   id: number,
-  data: Partial<CreateBuyPayload>
+  data: Partial<CreateBuyPayload> & {new_customer?: NewCustomerPayload}
 ): Promise<{success: boolean; data?: Buy; message?: string}> => {
   try {
     const response = await api.put(`/buys/${id}`, data);
@@ -98,6 +98,29 @@ export const updateBuy = async (
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to update buy',
+    };
+  }
+};
+
+// Save new customer for draft buy
+export const saveNewCustomerToDraft = async (
+  buyId: number,
+  newCustomer: NewCustomerPayload
+): Promise<{success: boolean; data?: any; message?: string}> => {
+  try {
+    console.log('Saving new customer to draft:', JSON.stringify(newCustomer));
+    const response = await api.put(`/buys/${buyId}`, {
+      new_customer: newCustomer,
+    });
+    return {
+      success: true,
+      data: response.data.data,
+    };
+  } catch (error: any) {
+    console.error('Error saving new customer to draft:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to save customer',
     };
   }
 };
@@ -116,6 +139,14 @@ export interface BuyItemPayload {
 export interface BuyPaymentPayload {
   method_id: number | string;
   amount: number;
+}
+
+// New customer payload type
+export interface NewCustomerPayload {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
 }
 
 // Add item to buy
@@ -209,7 +240,8 @@ export const updateBuyPayments = async (
 export const saveBuyAsPending = async (
   id: number,
   payments?: BuyPaymentPayload[],
-  storeCreditAmount?: number
+  storeCreditAmount?: number,
+  newCustomer?: NewCustomerPayload
 ): Promise<{success: boolean; data?: any; message?: string}> => {
   try {
     // Ensure payment amounts are numbers, not strings
@@ -219,10 +251,14 @@ export const saveBuyAsPending = async (
     }));
 
     console.log('Saving buy as pending with payments:', JSON.stringify(cleanedPayments));
+    if (newCustomer) {
+      console.log('Creating new customer:', JSON.stringify(newCustomer));
+    }
 
     const response = await api.post(`/buys/${id}/pending`, {
       payments: cleanedPayments,
       store_credit_amount: storeCreditAmount,
+      new_customer: newCustomer,
     });
     return {
       success: true,
@@ -242,7 +278,9 @@ export const saveBuyAsPending = async (
 export const completeBuy = async (
   id: number,
   payments?: BuyPaymentPayload[],
-  storeCreditAmount?: number
+  storeCreditAmount?: number,
+  newCustomer?: NewCustomerPayload,
+  createdBy?: string
 ): Promise<{success: boolean; data?: any; message?: string}> => {
   try {
     // Ensure payment amounts are numbers, not strings
@@ -251,9 +289,15 @@ export const completeBuy = async (
       amount: typeof p.amount === 'string' ? parseFloat(p.amount as string) : p.amount,
     }));
 
+    if (newCustomer) {
+      console.log('Creating new customer on complete:', JSON.stringify(newCustomer));
+    }
+
     const response = await api.post(`/buys/${id}/complete`, {
       payments: cleanedPayments,
       store_credit_amount: storeCreditAmount,
+      new_customer: newCustomer,
+      created_by: createdBy,
     });
     return {
       success: true,
@@ -325,4 +369,21 @@ export const deleteBuy = async (id: number): Promise<{success: boolean; message?
 // Discard draft
 export const discardBuyDraft = async (id: number): Promise<{success: boolean; message?: string}> => {
   return deleteBuy(id);
+};
+
+// Restore deleted buy
+export const restoreBuy = async (id: number): Promise<{success: boolean; data?: Buy; message?: string}> => {
+  try {
+    const response = await api.post(`/buys/${id}/restore`);
+    return {
+      success: true,
+      data: parseBuy(response.data.data || response.data),
+    };
+  } catch (error: any) {
+    console.error('Error restoring buy:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to restore buy',
+    };
+  }
 };

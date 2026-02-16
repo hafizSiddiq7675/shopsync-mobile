@@ -39,6 +39,8 @@ const Step3ItemsScreen: React.FC = () => {
     dispatch,
     totalSellValue,
     totalBuyAmount,
+    totalPayments,
+    remainingAmount,
     getItemCostBasis,
     saveCostMode,
     addItemToServer,
@@ -203,6 +205,23 @@ const Step3ItemsScreen: React.FC = () => {
     }
     if (state.costEntryMode === 'allocate' && (parseFloat(state.allocateTotalAmount) || 0) <= 0) {
       Toast.show({type: 'error', text1: 'Enter Total Buy Amount for allocation'});
+      return;
+    }
+    // Validate payment matches items cost
+    if (remainingAmount > 0.01) {
+      Toast.show({
+        type: 'error',
+        text1: 'Payment Underpaid',
+        text2: `Add $${remainingAmount.toFixed(2)} more payment or reduce items cost`,
+      });
+      return;
+    }
+    if (remainingAmount < -0.01) {
+      Toast.show({
+        type: 'error',
+        text1: 'Payment Overpaid',
+        text2: `Reduce payment by $${Math.abs(remainingAmount).toFixed(2)} or add more items`,
+      });
       return;
     }
     navigation.navigate('Step4Review');
@@ -402,6 +421,81 @@ const Step3ItemsScreen: React.FC = () => {
             <Text style={styles.addItemText}>Add Item</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Payment Progress - Shows how much paid vs required */}
+        {state.items.length > 0 && totalBuyAmount > 0 && (
+          <View style={styles.progressCard}>
+            <View style={styles.progressHeader}>
+              <View style={styles.progressTitleRow}>
+                <Icon source="cash-check" size={18} color={COLORS.purple} />
+                <Text style={styles.progressLabel}>Payment vs Items Cost</Text>
+              </View>
+              <Text style={styles.progressAmounts}>
+                <Text style={{color: remainingAmount <= 0.01 ? COLORS.green : COLORS.purple}}>
+                  ${totalPayments.toFixed(2)}
+                </Text>
+                <Text style={styles.progressSeparator}> / </Text>
+                <Text style={styles.progressTotal}>${totalBuyAmount.toFixed(2)}</Text>
+              </Text>
+            </View>
+
+            {/* Progress Bar - Shows items cost as % of payment */}
+            <View style={styles.progressBarContainer}>
+              <View style={styles.progressBarBackground}>
+                <View
+                  style={[
+                    styles.progressBarFill,
+                    {
+                      width: `${Math.min((totalBuyAmount / totalPayments) * 100, 100)}%`,
+                      backgroundColor: remainingAmount <= 0.01 && remainingAmount >= -0.01
+                        ? COLORS.green
+                        : COLORS.orange,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+
+            {/* Status Row */}
+            <View style={styles.progressStatusRow}>
+              {remainingAmount <= 0.01 && remainingAmount >= -0.01 ? (
+                <View style={styles.progressBalanced}>
+                  <Icon source="check-circle" size={16} color={COLORS.green} />
+                  <Text style={styles.progressBalancedText}>Payment Matches Cost</Text>
+                </View>
+              ) : remainingAmount < -0.01 ? (
+                <View style={styles.progressWarning}>
+                  <Icon source="alert-circle" size={16} color={COLORS.orange} />
+                  <Text style={styles.progressWarningText}>
+                    Overpaid by ${Math.abs(remainingAmount).toFixed(2)}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.progressUnderpaid}>
+                  <Icon source="alert-circle-outline" size={16} color={COLORS.orange} />
+                  <Text style={styles.progressUnderpaidText}>
+                    Underpaid by ${remainingAmount.toFixed(2)}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.progressPercent}>
+                {Math.min(Math.round((totalBuyAmount / totalPayments) * 100), 100)}%
+              </Text>
+            </View>
+
+            {/* Fix Suggestion */}
+            {(remainingAmount > 0.01 || remainingAmount < -0.01) && (
+              <View style={styles.progressFixSuggestion}>
+                <Icon source="information-outline" size={14} color={COLORS.textMuted} />
+                <Text style={styles.progressFixText}>
+                  {remainingAmount > 0.01
+                    ? `Add $${remainingAmount.toFixed(2)} more payment OR reduce items cost`
+                    : `Reduce payment by $${Math.abs(remainingAmount).toFixed(2)} OR add more items`}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Summary */}
         {state.items.length > 0 && (
@@ -917,6 +1011,109 @@ const styles = StyleSheet.create({
     color: COLORS.green,
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Progress Card
+  progressCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.purple + '30',
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  progressTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  progressLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+  },
+  progressAmounts: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  progressSeparator: {
+    color: COLORS.textMuted,
+  },
+  progressTotal: {
+    color: COLORS.textPrimary,
+  },
+  progressBarContainer: {
+    marginBottom: SPACING.sm,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: COLORS.inputBg,
+    borderRadius: RADIUS.full,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: RADIUS.full,
+  },
+  progressStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  progressBalanced: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  progressBalancedText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.green,
+  },
+  progressWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  progressWarningText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.orange,
+  },
+  progressUnderpaid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  progressUnderpaidText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.orange,
+  },
+  progressPercent: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
+  progressFixSuggestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  progressFixText: {
+    flex: 1,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontStyle: 'italic',
   },
   // Summary Card
   summaryCard: {

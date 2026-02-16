@@ -153,6 +153,17 @@ const BuyDetailsScreen: React.FC = () => {
           </Text>
         </View>
 
+        {/* Created By Section */}
+        {buy.created_by && (
+          <View style={styles.section}>
+            <View style={styles.createdByRow}>
+              <Icon source="account-edit-outline" size={18} color={COLORS.purple} />
+              <Text style={styles.createdByLabel}>Created By:</Text>
+              <Text style={styles.createdByValue}>{buy.created_by}</Text>
+            </View>
+          </View>
+        )}
+
         {/* Customer Section */}
         {buy.customer && (
           <View style={styles.section}>
@@ -176,7 +187,7 @@ const BuyDetailsScreen: React.FC = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Items ({buy.items.length})</Text>
-            {notInInventoryCount > 0 && (
+            {buy.status === 'completed' && notInInventoryCount > 0 && (
               <TouchableOpacity onPress={selectAllNotInInventory}>
                 <Text style={styles.selectAllText}>Select All</Text>
               </TouchableOpacity>
@@ -190,17 +201,19 @@ const BuyDetailsScreen: React.FC = () => {
                 styles.itemCard,
                 selectedItems.has(item.id) && styles.itemCardSelected,
               ]}
-              onPress={() => !item.added_to_inventory && toggleItemSelection(item.id)}
-              disabled={item.added_to_inventory}>
-              <View style={styles.itemCheckbox}>
-                {item.added_to_inventory ? (
-                  <Icon source="check-circle" size={22} color={COLORS.green} />
-                ) : selectedItems.has(item.id) ? (
-                  <Icon source="checkbox-marked" size={22} color={COLORS.purple} />
-                ) : (
-                  <Icon source="checkbox-blank-outline" size={22} color={COLORS.textSecondary} />
-                )}
-              </View>
+              onPress={() => buy.status === 'completed' && !item.added_to_inventory && toggleItemSelection(item.id)}
+              disabled={buy.status !== 'completed' || item.added_to_inventory}>
+              {buy.status === 'completed' && (
+                <View style={styles.itemCheckbox}>
+                  {item.added_to_inventory ? (
+                    <Icon source="check-circle" size={22} color={COLORS.green} />
+                  ) : selectedItems.has(item.id) ? (
+                    <Icon source="checkbox-marked" size={22} color={COLORS.purple} />
+                  ) : (
+                    <Icon source="checkbox-blank-outline" size={22} color={COLORS.textSecondary} />
+                  )}
+                </View>
+              )}
               <View style={styles.itemContent}>
                 <Text style={styles.itemName}>{item.name}</Text>
                 <View style={styles.itemDetails}>
@@ -221,7 +234,7 @@ const BuyDetailsScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
 
-          {notInInventoryCount > 0 && (
+          {buy.status === 'completed' && notInInventoryCount > 0 && (
             <TouchableOpacity
               style={[
                 styles.addToInventoryButton,
@@ -279,17 +292,6 @@ const BuyDetailsScreen: React.FC = () => {
             </View>
           ))}
         </View>
-
-        {/* Created By Section */}
-        {buy.created_by && (
-          <View style={styles.section}>
-            <View style={styles.createdByRow}>
-              <Icon source="account-edit-outline" size={18} color={COLORS.purple} />
-              <Text style={styles.createdByLabel}>Created By:</Text>
-              <Text style={styles.createdByValue}>{buy.created_by}</Text>
-            </View>
-          </View>
-        )}
 
         {/* Notes Section */}
         {buy.notes && (

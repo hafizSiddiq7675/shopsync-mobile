@@ -172,7 +172,7 @@ const Step4ReviewScreen: React.FC = () => {
             <View style={styles.customerCard}>
               <View style={styles.customerAvatar}>
                 <Text style={styles.customerAvatarText}>
-                  {state.customer.name.charAt(0).toUpperCase()}
+                  {(state.customer.name || '?').charAt(0).toUpperCase()}
                 </Text>
               </View>
               <View style={styles.customerInfo}>
@@ -193,7 +193,7 @@ const Step4ReviewScreen: React.FC = () => {
             <View style={styles.customerCard}>
               <View style={[styles.customerAvatar, styles.customerAvatarNew]}>
                 <Text style={styles.customerAvatarText}>
-                  {state.newCustomer.firstName.charAt(0).toUpperCase()}
+                  {(state.newCustomer.firstName || '?').charAt(0).toUpperCase()}
                 </Text>
               </View>
               <View style={styles.customerInfo}>

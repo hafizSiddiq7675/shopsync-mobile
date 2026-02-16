@@ -10,8 +10,10 @@ import {
   updateBuyPayments,
   saveBuyAsPending,
   completeBuy,
+  saveNewCustomerToDraft,
   BuyItemPayload,
   BuyPaymentPayload,
+  NewCustomerPayload,
 } from '@services/buyService';
 import Toast from 'react-native-toast-message';
 
@@ -83,6 +85,7 @@ type BuyWizardAction =
   | {type: 'SET_COST_ENTRY_MODE'; payload: CostEntryMode}
   | {type: 'SET_ALLOCATE_TOTAL'; payload: string}
   | {type: 'ADD_PAYMENT'; payload: LocalPayment}
+  | {type: 'UPDATE_PAYMENT'; payload: LocalPayment}
   | {type: 'REMOVE_PAYMENT'; payload: string}
   | {type: 'SET_PAYMENTS'; payload: LocalPayment[]}
   | {type: 'SET_CREATED_BY'; payload: string}
@@ -155,6 +158,13 @@ function buyWizardReducer(state: BuyWizardState, action: BuyWizardAction): BuyWi
       return {...state, allocateTotalAmount: action.payload};
     case 'ADD_PAYMENT':
       return {...state, payments: [...state.payments, action.payload]};
+    case 'UPDATE_PAYMENT':
+      return {
+        ...state,
+        payments: state.payments.map(p =>
+          p.localId === action.payload.localId ? action.payload : p
+        ),
+      };
     case 'REMOVE_PAYMENT':
       return {...state, payments: state.payments.filter(p => p.localId !== action.payload)};
     case 'SET_PAYMENTS':
@@ -434,13 +444,54 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
     }
   }, [state.buyId]);
 
-  // Save as draft (just updates status display, already saved)
+  // Save as draft (saves new customer if exists)
   const saveAsDraft = useCallback(async (): Promise<boolean> => {
     if (!state.buyId) return false;
-    // Draft is already auto-saved, just return success
-    Toast.show({type: 'success', text1: 'Draft saved'});
+
+    // Validate payments match buy amount (only if there are payments)
+    if (state.payments.length > 0 && Math.abs(totalPayments - totalBuyAmount) > 0.01) {
+      Toast.show({
+        type: 'error',
+        text1: 'Payment mismatch',
+        text2: `Total payments ($${totalPayments.toFixed(2)}) must equal buy cost ($${totalBuyAmount.toFixed(2)})`,
+      });
+      return false;
+    }
+
+    // If there's a new customer, save them to the draft
+    if (state.newCustomer) {
+      dispatch({type: 'SET_SAVING', payload: true});
+      try {
+        const newCustomerPayload: NewCustomerPayload = {
+          first_name: state.newCustomer.firstName,
+          last_name: state.newCustomer.lastName,
+          email: state.newCustomer.email,
+          phone: state.newCustomer.phone || undefined,
+        };
+        const result = await saveNewCustomerToDraft(state.buyId, newCustomerPayload);
+        if (!result.success) {
+          Toast.show({type: 'error', text1: result.message || 'Failed to save customer'});
+          return false;
+        }
+        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+      } catch (error) {
+        Toast.show({type: 'error', text1: 'Failed to save draft'});
+        return false;
+      } finally {
+        dispatch({type: 'SET_SAVING', payload: false});
+      }
+    }
+
+    // Show appropriate message based on current status
+    const statusMessages: Record<string, string> = {
+      draft: 'Draft saved',
+      pending: 'Changes saved',
+      completed: 'Changes saved',
+    };
+    const message = statusMessages[state.status || 'draft'] || 'Changes saved';
+    Toast.show({type: 'success', text1: message});
     return true;
-  }, [state.buyId]);
+  }, [state.buyId, state.newCustomer, state.payments.length, state.status, totalPayments, totalBuyAmount]);
 
   // Save as pending
   const saveAsPending = useCallback(async (): Promise<boolean> => {
@@ -449,6 +500,16 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
     // Validate customer is selected
     if (!state.customer && !state.newCustomer) {
       Toast.show({type: 'error', text1: 'Customer is required for pending status'});
+      return false;
+    }
+
+    // Validate payments match buy amount
+    if (totalBuyAmount > 0 && Math.abs(totalPayments - totalBuyAmount) > 0.01) {
+      Toast.show({
+        type: 'error',
+        text1: 'Payment mismatch',
+        text2: `Total payments ($${totalPayments.toFixed(2)}) must equal buy cost ($${totalBuyAmount.toFixed(2)})`,
+      });
       return false;
     }
 
@@ -465,7 +526,17 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
       );
       const storeCreditAmount = storeCreditPayment?.amount || 0;
 
-      const result = await saveBuyAsPending(state.buyId, payments, storeCreditAmount);
+      // Prepare new customer data if exists
+      const newCustomerPayload: NewCustomerPayload | undefined = state.newCustomer
+        ? {
+            first_name: state.newCustomer.firstName,
+            last_name: state.newCustomer.lastName,
+            email: state.newCustomer.email,
+            phone: state.newCustomer.phone || undefined,
+          }
+        : undefined;
+
+      const result = await saveBuyAsPending(state.buyId, payments, storeCreditAmount, newCustomerPayload);
       if (result.success) {
         dispatch({type: 'SET_STATUS', payload: 'pending'});
         dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
@@ -480,7 +551,7 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
     } finally {
       dispatch({type: 'SET_SAVING', payload: false});
     }
-  }, [state.buyId, state.customer, state.newCustomer, state.payments]);
+  }, [state.buyId, state.customer, state.newCustomer, state.payments, totalPayments, totalBuyAmount]);
 
   // Complete buy transaction
   const completeBuyTransaction = useCallback(async (): Promise<boolean> => {
@@ -499,6 +570,20 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
       Toast.show({type: 'error', text1: 'At least one payment is required'});
       return false;
     }
+    if (!state.createdBy || state.createdBy.trim() === '') {
+      Toast.show({type: 'error', text1: 'Created By name is required'});
+      return false;
+    }
+
+    // Validate payments match buy amount
+    if (totalBuyAmount > 0 && Math.abs(totalPayments - totalBuyAmount) > 0.01) {
+      Toast.show({
+        type: 'error',
+        text1: 'Payment mismatch',
+        text2: `Total payments ($${totalPayments.toFixed(2)}) must equal buy cost ($${totalBuyAmount.toFixed(2)})`,
+      });
+      return false;
+    }
 
     dispatch({type: 'SET_SAVING', payload: true});
     try {
@@ -513,7 +598,17 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
       );
       const storeCreditAmount = storeCreditPayment?.amount || 0;
 
-      const result = await completeBuy(state.buyId, payments, storeCreditAmount);
+      // Prepare new customer data if exists
+      const newCustomerPayload: NewCustomerPayload | undefined = state.newCustomer
+        ? {
+            first_name: state.newCustomer.firstName,
+            last_name: state.newCustomer.lastName,
+            email: state.newCustomer.email,
+            phone: state.newCustomer.phone || undefined,
+          }
+        : undefined;
+
+      const result = await completeBuy(state.buyId, payments, storeCreditAmount, newCustomerPayload, state.createdBy);
       if (result.success) {
         dispatch({type: 'SET_STATUS', payload: 'completed'});
         dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
@@ -527,7 +622,7 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
     } finally {
       dispatch({type: 'SET_SAVING', payload: false});
     }
-  }, [state.buyId, state.customer, state.newCustomer, state.items, state.payments, totalBuyAmount]);
+  }, [state.buyId, state.customer, state.newCustomer, state.items, state.payments, state.createdBy, totalBuyAmount, totalPayments]);
 
   return (
     <BuyWizardContext.Provider

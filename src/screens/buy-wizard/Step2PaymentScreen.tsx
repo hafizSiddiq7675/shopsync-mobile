@@ -46,6 +46,10 @@ const Step2PaymentScreen: React.FC = () => {
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<number>(1);
   const [paymentAmount, setPaymentAmount] = useState('');
 
+  // Edit mode state
+  const [editingPayment, setEditingPayment] = useState<LocalPayment | null>(null);
+  const isEditMode = editingPayment !== null;
+
   // Load payment methods on mount
   useEffect(() => {
     loadPaymentMethods();
@@ -72,11 +76,20 @@ const Step2PaymentScreen: React.FC = () => {
     return available?.id || paymentMethods[0]?.id || 1;
   };
 
-  // Open payment modal with remaining amount pre-filled
+  // Open payment modal for adding new payment
   const openPaymentModal = () => {
+    setEditingPayment(null); // Not editing
     setPaymentAmount(remainingAmount > 0 ? remainingAmount.toFixed(2) : '');
     // Select the first available payment method that hasn't been added yet
     setSelectedPaymentMethodId(getFirstAvailableMethod());
+    setPaymentModalVisible(true);
+  };
+
+  // Open payment modal for editing existing payment
+  const openEditModal = (payment: LocalPayment) => {
+    setEditingPayment(payment);
+    setPaymentAmount(payment.amount.toString());
+    setSelectedPaymentMethodId(payment.payment_method_id);
     setPaymentModalVisible(true);
   };
 
@@ -84,12 +97,13 @@ const Step2PaymentScreen: React.FC = () => {
   const closePaymentModal = () => {
     setPaymentModalVisible(false);
     setPaymentAmount('');
+    setEditingPayment(null);
     // Reset to first available payment method
     setSelectedPaymentMethodId(getFirstAvailableMethod());
   };
 
-  // Add payment
-  const handleAddPayment = async () => {
+  // Add or Update payment
+  const handleSavePayment = async () => {
     const amount = parseFloat(paymentAmount);
     if (!amount || amount <= 0) {
       Toast.show({type: 'error', text1: 'Please enter a valid amount'});
@@ -102,32 +116,44 @@ const Step2PaymentScreen: React.FC = () => {
       return;
     }
 
-    const newPayment: LocalPayment = {
-      localId: `payment_${Date.now()}`,
-      payment_method_id: method.id,
-      payment_method_name: method.name,
-      amount: amount,
-    };
+    if (isEditMode && editingPayment) {
+      // Update existing payment
+      const updatedPayment: LocalPayment = {
+        ...editingPayment,
+        payment_method_id: method.id,
+        payment_method_name: method.name,
+        amount: amount,
+      };
 
-    dispatch({type: 'ADD_PAYMENT', payload: newPayment});
-    closePaymentModal();
-    Toast.show({type: 'success', text1: 'Payment added'});
+      dispatch({type: 'UPDATE_PAYMENT', payload: updatedPayment});
+      closePaymentModal();
+      Toast.show({type: 'success', text1: 'Payment updated'});
 
-    // Auto-save payments to server
-    if (state.buyId) {
-      const updatedPayments = [...state.payments, newPayment];
-      await savePayments(updatedPayments);
-    }
-  };
+      // Auto-save payments to server
+      if (state.buyId) {
+        const updatedPayments = state.payments.map(p =>
+          p.localId === editingPayment.localId ? updatedPayment : p
+        );
+        await savePayments(updatedPayments);
+      }
+    } else {
+      // Add new payment
+      const newPayment: LocalPayment = {
+        localId: `payment_${Date.now()}`,
+        payment_method_id: method.id,
+        payment_method_name: method.name,
+        amount: amount,
+      };
 
-  // Remove payment
-  const removePayment = async (localId: string) => {
-    dispatch({type: 'REMOVE_PAYMENT', payload: localId});
+      dispatch({type: 'ADD_PAYMENT', payload: newPayment});
+      closePaymentModal();
+      Toast.show({type: 'success', text1: 'Payment added'});
 
-    // Auto-save payments to server
-    if (state.buyId) {
-      const updatedPayments = state.payments.filter(p => p.localId !== localId);
-      await savePayments(updatedPayments);
+      // Auto-save payments to server
+      if (state.buyId) {
+        const updatedPayments = [...state.payments, newPayment];
+        await savePayments(updatedPayments);
+      }
     }
   };
 
@@ -271,9 +297,9 @@ const Step2PaymentScreen: React.FC = () => {
               </View>
               <Text style={styles.paymentItemAmount}>${payment.amount.toFixed(2)}</Text>
               <TouchableOpacity
-                style={styles.paymentItemRemove}
-                onPress={() => removePayment(payment.localId)}>
-                <Icon source="close" size={16} color={COLORS.white} />
+                style={styles.paymentItemEdit}
+                onPress={() => openEditModal(payment)}>
+                <Icon source="pencil" size={16} color={COLORS.white} />
               </TouchableOpacity>
             </View>
           ))}
@@ -328,11 +354,11 @@ const Step2PaymentScreen: React.FC = () => {
         />
       </ScrollView>
 
-      {/* Add Payment Modal */}
+      {/* Add/Edit Payment Modal */}
       <DraggableBottomSheet
         visible={paymentModalVisible}
         onClose={closePaymentModal}
-        title="Add Payment">
+        title={isEditMode ? 'Edit Payment' : 'Add Payment'}>
         {isLoadingMethods ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.purple} />
@@ -343,14 +369,16 @@ const Step2PaymentScreen: React.FC = () => {
             <Text style={styles.modalLabel}>Payment Method</Text>
             <View style={styles.paymentMethodGrid}>
               {paymentMethods.map(method => {
-                const isAdded = isPaymentMethodAdded(method.id);
+                // In edit mode, allow the current payment method to be selected
+                const isCurrentEditMethod = isEditMode && editingPayment?.payment_method_id === method.id;
+                const isAdded = !isCurrentEditMethod && isPaymentMethodAdded(method.id);
                 const isSelected = selectedPaymentMethodId === method.id;
                 return (
                   <TouchableOpacity
                     key={method.id}
                     style={[
                       styles.paymentMethodOption,
-                      isSelected && !isAdded && styles.paymentMethodOptionActive,
+                      isSelected && styles.paymentMethodOptionActive,
                       isAdded && styles.paymentMethodOptionAdded,
                     ]}
                     onPress={() => !isAdded && setSelectedPaymentMethodId(method.id)}
@@ -364,7 +392,7 @@ const Step2PaymentScreen: React.FC = () => {
                     <Text
                       style={[
                         styles.paymentMethodText,
-                        isSelected && !isAdded && styles.paymentMethodTextActive,
+                        isSelected && styles.paymentMethodTextActive,
                         isAdded && styles.paymentMethodTextAdded,
                       ]}>
                       {method.name}
@@ -411,10 +439,10 @@ const Step2PaymentScreen: React.FC = () => {
               </View>
             )}
 
-            {/* Add Button */}
-            <TouchableOpacity style={styles.addButton} onPress={handleAddPayment}>
-              <Icon source="plus" size={20} color={COLORS.white} />
-              <Text style={styles.addButtonText}>Add Payment</Text>
+            {/* Save Button */}
+            <TouchableOpacity style={styles.addButton} onPress={handleSavePayment}>
+              <Icon source={isEditMode ? 'check' : 'plus'} size={20} color={COLORS.white} />
+              <Text style={styles.addButtonText}>{isEditMode ? 'Update Payment' : 'Add Payment'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -616,6 +644,14 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: RADIUS.full,
     backgroundColor: COLORS.danger + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentItemEdit: {
+    width: 28,
+    height: 28,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.purple + '30',
     alignItems: 'center',
     justifyContent: 'center',
   },

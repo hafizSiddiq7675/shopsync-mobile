@@ -313,19 +313,69 @@ export const completeBuy = async (
   }
 };
 
+// Add to inventory response type
+export interface AddToInventoryResponse {
+  success: boolean;
+  message?: string;
+  added?: number;
+  merged?: number;
+  items?: Array<{
+    id: number;
+    product_id: number;
+    sku: string;
+    merged: boolean;
+  }>;
+}
+
 // Add items to inventory
 export const addBuyItemsToInventory = async (
   buyId: number,
   itemIds: number[]
-): Promise<{success: boolean; message?: string}> => {
+): Promise<AddToInventoryResponse> => {
   try {
-    await api.post(`/buys/${buyId}/add-to-inventory`, {item_ids: itemIds});
-    return {success: true};
+    const response = await api.post(`/buys/${buyId}/add-to-inventory`, {item_ids: itemIds});
+    return {
+      success: true,
+      message: response.data.message,
+      added: response.data.added,
+      merged: response.data.merged,
+      items: response.data.items,
+    };
   } catch (error: any) {
     console.error('Error adding items to inventory:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to add items to inventory',
+    };
+  }
+};
+
+// Remove from inventory response type
+export interface RemoveFromInventoryResponse {
+  success: boolean;
+  message?: string;
+  reduced?: number;
+  deleted?: number;
+}
+
+// Remove items from inventory
+export const removeBuyItemsFromInventory = async (
+  buyId: number,
+  itemIds: number[]
+): Promise<RemoveFromInventoryResponse> => {
+  try {
+    const response = await api.post(`/buys/${buyId}/remove-from-inventory`, {item_ids: itemIds});
+    return {
+      success: true,
+      message: response.data.message,
+      reduced: response.data.reduced,
+      deleted: response.data.deleted,
+    };
+  } catch (error: any) {
+    console.error('Error removing items from inventory:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to remove from inventory',
     };
   }
 };

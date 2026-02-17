@@ -202,3 +202,59 @@ export const getDashboardStats = async (): Promise<DashboardStats | null> => {
     return null;
   }
 };
+
+// Barcode response type
+export interface BarcodeData {
+  id: number;
+  name: string;
+  sku: string;
+  barcode: string; // Base64 image data
+}
+
+export interface SingleBarcodeResponse {
+  success: boolean;
+  data?: BarcodeData;
+  message?: string;
+}
+
+export interface BulkBarcodeResponse {
+  success: boolean;
+  count?: number;
+  data?: BarcodeData[];
+  message?: string;
+}
+
+// Get single product barcode by SKU
+export const getProductBarcode = async (sku: string): Promise<SingleBarcodeResponse> => {
+  try {
+    const response = await api.get(`/products/barcode/${sku}`);
+    return {
+      success: true,
+      data: response.data.data || response.data,
+    };
+  } catch (error: any) {
+    console.error('Error fetching barcode:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to fetch barcode',
+    };
+  }
+};
+
+// Get bulk product barcodes by SKUs
+export const getProductBarcodes = async (skus: string[]): Promise<BulkBarcodeResponse> => {
+  try {
+    const response = await api.post('/products/barcodes', {skus});
+    return {
+      success: true,
+      count: response.data.count,
+      data: response.data.data || [],
+    };
+  } catch (error: any) {
+    console.error('Error fetching barcodes:', error);
+    return {
+      success: false,
+      message: error.response?.data?.message || 'Failed to fetch barcodes',
+    };
+  }
+};

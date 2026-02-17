@@ -25,6 +25,19 @@ import ConfirmationModal from '@components/ConfirmationModal';
 type BuyListNavigationProp = NativeStackNavigationProp<BuyStackParamList, 'BuyList'>;
 type TabNavigationProp = NavigationProp<TabParamList>;
 
+// Avatar colors using theme colors - creates visual variety
+const getAvatarColor = (name: string) => {
+  const colors = [
+    COLORS.purple,
+    COLORS.pink,
+    COLORS.green,
+    COLORS.orange,
+  ];
+  const firstChar = (name || 'N')[0].toUpperCase();
+  const index = firstChar.charCodeAt(0) % colors.length;
+  return colors[index];
+};
+
 const STATUS_FILTERS: {label: string; value: BuyStatus | 'all'}[] = [
   {label: 'All', value: 'all'},
   {label: 'Draft', value: 'draft'},
@@ -241,7 +254,10 @@ const BuyListScreen: React.FC = () => {
           <View style={styles.middleRow}>
             {/* Customer */}
             <View style={styles.customerSection}>
-              <View style={styles.customerAvatar}>
+              <View style={[
+                styles.customerAvatar,
+                {backgroundColor: getAvatarColor(item.customer?.name || 'N')}
+              ]}>
                 <Text style={styles.customerAvatarText}>
                   {(item.customer?.name || 'N')[0].toUpperCase()}
                 </Text>
@@ -486,7 +502,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterChipActive: {
-    backgroundColor: COLORS.purple,
+    backgroundColor: COLORS.green,
   },
   filterChipText: {
     color: COLORS.textSecondary,
@@ -532,7 +548,7 @@ const styles = StyleSheet.create({
   buyNumber: {
     fontSize: 15,
     fontWeight: '700',
-    color: COLORS.white,
+    color: COLORS.purple,
   },
   dotSeparator: {
     color: COLORS.textMuted,
@@ -568,17 +584,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   customerAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: COLORS.purple,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   customerAvatarText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: COLORS.white,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 2,
   },
   customerInfo: {
     flex: 1,
@@ -657,7 +683,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.purple,
+    backgroundColor: COLORS.green,
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
     height: 44,

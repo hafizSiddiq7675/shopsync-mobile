@@ -8,3 +8,11 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# PDFBox library rules (used by react-native-html-to-pdf)
+-dontwarn com.gemalto.jp2.**
+-dontwarn javax.xml.bind.**
+-dontwarn org.bouncycastle.**
+-keep class com.tom_roush.pdfbox.** { *; }
+-keep class org.apache.fontbox.** { *; }
+-keep class org.apache.pdfbox.** { *; }

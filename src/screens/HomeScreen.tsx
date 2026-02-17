@@ -174,6 +174,7 @@ const HomeScreen: React.FC = () => {
         }>
         {/* Welcome Card */}
         <View style={styles.welcomeCard}>
+          <View style={styles.welcomeAccent} />
           <View style={styles.welcomeContent}>
             <Text style={styles.welcomeTitle}>Welcome Back!</Text>
             <Text style={styles.welcomeSubtitle}>
@@ -186,10 +187,13 @@ const HomeScreen: React.FC = () => {
         </View>
 
         {/* Quick Stats */}
-        <Text style={styles.sectionTitle}>Today's Overview</Text>
+        <View style={styles.sectionHeader}>
+          <Icon source="chart-timeline-variant" size={18} color={COLORS.green} />
+          <Text style={styles.sectionTitle}>Today's Overview</Text>
+        </View>
         <View style={styles.statsGrid}>
           {quickStats.map((stat, index) => (
-            <View key={index} style={styles.statCard}>
+            <View key={index} style={[styles.statCard, {borderLeftColor: stat.color}]}>
               <View
                 style={[
                   styles.statIconContainer,
@@ -210,10 +214,13 @@ const HomeScreen: React.FC = () => {
         </View>
 
         {/* Main Actions */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.sectionHeader}>
+          <Icon source="lightning-bolt" size={18} color={COLORS.purple} />
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+        </View>
         <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={styles.actionCard}
+            style={[styles.actionCard, styles.actionCardPurple]}
             activeOpacity={0.8}
             onPress={() => navigation.navigate('SaleTab' as never)}>
             <View style={[styles.actionIconWrapper, {backgroundColor: COLORS.purple}]}>
@@ -225,11 +232,11 @@ const HomeScreen: React.FC = () => {
                 Sell items to customers
               </Text>
             </View>
-            <Icon source="chevron-right" size={24} color="#8B8BA7" />
+            <Icon source="chevron-right" size={24} color={COLORS.purple} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.actionCard}
+            style={[styles.actionCard, styles.actionCardGreen]}
             activeOpacity={0.8}
             onPress={() => navigation.navigate('BuyTab' as never)}>
             <View style={[styles.actionIconWrapper, {backgroundColor: COLORS.green}]}>
@@ -241,12 +248,15 @@ const HomeScreen: React.FC = () => {
                 Purchase from vendors
               </Text>
             </View>
-            <Icon source="chevron-right" size={24} color="#8B8BA7" />
+            <Icon source="chevron-right" size={24} color={COLORS.green} />
           </TouchableOpacity>
         </View>
 
         {/* More Options */}
-        <Text style={styles.sectionTitle}>More Options</Text>
+        <View style={styles.sectionHeader}>
+          <Icon source="dots-horizontal-circle-outline" size={18} color={COLORS.orange} />
+          <Text style={styles.sectionTitle}>More Options</Text>
+        </View>
         <View style={styles.moreOptions}>
           <TouchableOpacity style={styles.optionItem}>
             <View
@@ -257,15 +267,7 @@ const HomeScreen: React.FC = () => {
             <Icon source="chevron-right" size={20} color="#5A5A7A" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.optionItem}>
-            <View style={[styles.optionIcon, {backgroundColor: COLORS.pink + '20'}]}>
-              <Icon source="chart-line" size={22} color={COLORS.pink} />
-            </View>
-            <Text style={styles.optionText}>Reports & Analytics</Text>
-            <Icon source="chevron-right" size={20} color="#5A5A7A" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.optionItem}>
+          <TouchableOpacity style={[styles.optionItem, styles.optionItemLast]}>
             <View
               style={[styles.optionIcon, {backgroundColor: COLORS.purple + '20'}]}>
               <Icon source="cog-outline" size={22} color={COLORS.purple} />
@@ -341,10 +343,24 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    ...SHADOWS.medium,
+    borderWidth: 1,
+    borderColor: COLORS.purple + '30',
+    overflow: 'hidden',
+    ...SHADOWS.purpleGlow,
+  },
+  welcomeAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: COLORS.purple,
+    borderTopLeftRadius: RADIUS.xl,
+    borderBottomLeftRadius: RADIUS.xl,
   },
   welcomeContent: {
     flex: 1,
+    marginLeft: SPACING.sm,
   },
   welcomeTitle: {
     fontSize: 22,
@@ -364,11 +380,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: SPACING.md,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -382,6 +403,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     alignItems: 'center',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.purple,
     ...SHADOWS.small,
   },
   statIconContainer: {
@@ -412,7 +435,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardBg,
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
-    ...SHADOWS.medium,
+    borderWidth: 1,
+  },
+  actionCardPurple: {
+    borderColor: COLORS.purple + '40',
+    ...SHADOWS.purpleGlow,
+  },
+  actionCardGreen: {
+    borderColor: COLORS.green + '40',
+    ...SHADOWS.greenGlow,
   },
   actionIconWrapper: {
     width: 56,
@@ -440,6 +471,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
     marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     ...SHADOWS.small,
   },
   optionItem: {
@@ -448,6 +481,9 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+  },
+  optionItemLast: {
+    borderBottomWidth: 0,
   },
   optionIcon: {
     width: 40,

@@ -252,31 +252,6 @@ const HomeScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        {/* More Options */}
-        <View style={styles.sectionHeader}>
-          <Icon source="dots-horizontal-circle-outline" size={18} color={COLORS.orange} />
-          <Text style={styles.sectionTitle}>More Options</Text>
-        </View>
-        <View style={styles.moreOptions}>
-          <TouchableOpacity style={styles.optionItem}>
-            <View
-              style={[styles.optionIcon, {backgroundColor: COLORS.orange + '20'}]}>
-              <Icon source="history" size={22} color={COLORS.orange} />
-            </View>
-            <Text style={styles.optionText}>Transaction History</Text>
-            <Icon source="chevron-right" size={20} color="#5A5A7A" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.optionItem, styles.optionItemLast]}>
-            <View
-              style={[styles.optionIcon, {backgroundColor: COLORS.purple + '20'}]}>
-              <Icon source="cog-outline" size={22} color={COLORS.purple} />
-            </View>
-            <Text style={styles.optionText}>Settings</Text>
-            <Icon source="chevron-right" size={20} color="#5A5A7A" />
-          </TouchableOpacity>
-        </View>
-
         {/* Footer */}
         <Text style={styles.footer}>Powered by Phantom Card Vault</Text>
 
@@ -465,38 +440,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#8B8BA7',
     marginTop: 2,
-  },
-  moreOptions: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: RADIUS.lg,
-    overflow: 'hidden',
-    marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    ...SHADOWS.small,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  optionItemLast: {
-    borderBottomWidth: 0,
-  },
-  optionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  optionText: {
-    flex: 1,
-    fontSize: 15,
-    color: '#FFFFFF',
-    marginLeft: SPACING.md,
   },
   footer: {
     textAlign: 'center',

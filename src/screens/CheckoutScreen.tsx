@@ -1804,11 +1804,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.green,
+    backgroundColor: COLORS.orange,
     borderRadius: RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.md,
-    ...SHADOWS.greenGlow,
+    ...SHADOWS.orangeGlow,
   },
   totalCardLeft: {
     flex: 1,
@@ -2228,9 +2228,10 @@ const styles = StyleSheet.create({
   },
   // Customer section styles
   customerSection: {
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
     borderWidth: 2,
     borderColor: 'transparent',
+    overflow: 'hidden',
   },
   customerSectionError: {
     borderColor: COLORS.danger,

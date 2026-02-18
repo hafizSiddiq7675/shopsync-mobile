@@ -39,7 +39,6 @@ export const searchCustomers = async (query: string): Promise<CustomerSearchResu
 
     return response.data.customers || response.data || [];
   } catch (error) {
-    console.log('Customer search error:', error);
     return [];
   }
 };
@@ -69,7 +68,6 @@ export const getCustomerDetails = async (customerId: number): Promise<Customer |
       lifetime_store_credit_used: parseFloat(customer.lifetime_store_credit_used) || 0,
     };
   } catch (error) {
-    console.log('Get customer error:', error);
     return null;
   }
 };
@@ -83,7 +81,6 @@ export const getCustomerPoints = async (customerId: number): Promise<{balance: n
       history: response.data.history || [],
     };
   } catch (error) {
-    console.log('Get points error:', error);
     return null;
   }
 };
@@ -97,7 +94,6 @@ export const getCustomerStoreCredit = async (customerId: number): Promise<{balan
       history: response.data.history || [],
     };
   } catch (error) {
-    console.log('Get store credit error:', error);
     return null;
   }
 };

@@ -47,10 +47,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         setError(response.message || 'Login failed');
       }
     } catch (err: any) {
-      console.log('Login Error:', JSON.stringify(err, null, 2));
-      console.log('Error Response:', err.response);
-      console.log('Error Message:', err.message);
-
       let errorMessage = 'Network error. Please try again.';
       if (err.response?.data?.message) {
         errorMessage = err.response.data.message;

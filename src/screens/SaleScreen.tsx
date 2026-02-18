@@ -40,6 +40,7 @@ const SaleScreen: React.FC = () => {
     removeFromCart,
     updateQuantity,
     getSubtotal,
+    isCustomItem,
   } = useCart();
 
   // Handle logout
@@ -194,11 +195,18 @@ const SaleScreen: React.FC = () => {
                       <Icon source="close" size={16} color={COLORS.danger} />
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.cartItemSku}>SKU: {item.sku}</Text>
+                  {!isCustomItem(item) && (
+                    <Text style={styles.cartItemSku}>SKU: {item.sku}</Text>
+                  )}
+                  {isCustomItem(item) && (
+                    <Text style={styles.cartItemSku}>Custom Item</Text>
+                  )}
                   <View style={styles.cartItemFooter}>
-                    <Text style={styles.cartItemStock}>
-                      Stock: {item.quantity}
-                    </Text>
+                    {!isCustomItem(item) && (
+                      <Text style={styles.cartItemStock}>
+                        Stock: {item.quantity}
+                      </Text>
+                    )}
                     <View style={styles.quantityControls}>
                       <TouchableOpacity
                         style={styles.quantityButton}
@@ -209,10 +217,12 @@ const SaleScreen: React.FC = () => {
                       <TouchableOpacity
                         style={[
                           styles.quantityButton,
-                          item.cartQty >= item.quantity && styles.quantityButtonDisabled,
+                          !isCustomItem(item) && item.cartQty >= item.quantity && styles.quantityButtonDisabled,
                         ]}
                         onPress={() => {
-                          if (item.cartQty < item.quantity) {
+                          if (isCustomItem(item)) {
+                            updateQuantity(item.id, item.cartQty + 1);
+                          } else if (item.cartQty < item.quantity) {
                             updateQuantity(item.id, item.cartQty + 1);
                           } else {
                             Toast.show({

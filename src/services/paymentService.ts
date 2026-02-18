@@ -16,7 +16,6 @@ export const getPaymentMethods = async (): Promise<PaymentMethod[]> => {
 
     return [];
   } catch (error) {
-    console.log('Payment methods error:', error);
     return [];
   }
 };
@@ -32,7 +31,6 @@ export const getBuyPaymentMethods = async (): Promise<PaymentMethod[]> => {
 
     return [];
   } catch (error) {
-    console.log('Buy payment methods error:', error);
     return [];
   }
 };

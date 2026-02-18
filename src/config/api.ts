@@ -32,10 +32,6 @@ const getApiUrl = (): string => {
 
 const API_URL = getApiUrl();
 
-// Log environment info
-console.log(__DEV__ ? '🔧 Development Mode' : '🚀 Production Mode');
-console.log('🌐 API URL:', API_URL);
-
 // Create axios instance
 const api = axios.create({
   baseURL: API_URL,
@@ -49,19 +45,13 @@ const api = axios.create({
 // Add token to every request automatically
 api.interceptors.request.use(
   async config => {
-    console.log('API Request:', config.method?.toUpperCase(), (config.baseURL || '') + (config.url || ''));
-    console.log('Request Data:', config.data);
-
     const token = await AsyncStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  error => {
-    console.log('Request Error:', error);
-    return Promise.reject(error);
-  },
+  error => Promise.reject(error),
 );
 
 // Handle responses and errors

@@ -200,14 +200,7 @@ const BuyDetailsScreen: React.FC = () => {
   // View single barcode
   const handleViewBarcode = async (sku: string) => {
     setIsBarcodeLoading(true);
-    console.log('[Barcode] Fetching single barcode for SKU:', sku);
     const result = await getProductBarcode(sku);
-    console.log('[Barcode] Single barcode API result:', {
-      success: result.success,
-      hasData: !!result.data,
-      dataKeys: result.data ? Object.keys(result.data) : [],
-      barcodePrefix: result.data?.barcode?.substring(0, 80),
-    });
     setIsBarcodeLoading(false);
 
     if (result.success && result.data) {
@@ -242,7 +235,6 @@ const BuyDetailsScreen: React.FC = () => {
         }
       }
     } catch (error: any) {
-      console.error('[Barcode] Single PDF error:', error);
       Toast.show({type: 'error', text1: 'Failed to generate PDF'});
     } finally {
       setIsGeneratingPdf(false);
@@ -307,7 +299,6 @@ const BuyDetailsScreen: React.FC = () => {
 
       return granted === PermissionsAndroid.RESULTS.GRANTED;
     } catch (err) {
-      console.warn('[Permission] Error requesting storage permission:', err);
       return false;
     }
   };
@@ -328,7 +319,6 @@ const BuyDetailsScreen: React.FC = () => {
 
         // Copy file to Downloads folder
         await RNFS.copyFile(filePath, downloadPath);
-        console.log('[Barcode] PDF copied to:', downloadPath);
 
         // Show success modal with the Downloads path
         setSavedPdfPath(downloadPath);
@@ -344,8 +334,6 @@ const BuyDetailsScreen: React.FC = () => {
       });
       return true;
     } catch (error: any) {
-      console.log('[Barcode] Share/Copy error:', error.message);
-
       // If user cancelled share on iOS, that's fine
       if (error.message?.includes('User did not share') ||
           error.message?.includes('cancel')) {
@@ -395,7 +383,6 @@ const BuyDetailsScreen: React.FC = () => {
           clearPrintSelection();
         }
       } catch (error: any) {
-        console.error('[Barcode] PDF generation error:', error);
         Toast.show({type: 'error', text1: 'Failed to generate PDF'});
       }
     } else {

@@ -109,7 +109,6 @@ export const searchProducts = async (query: string): Promise<Product[]> => {
     const products = response.data.products || response.data || [];
     return products.map(parseProduct);
   } catch (error) {
-    console.log('Search error:', error);
     return [];
   }
 };
@@ -126,7 +125,6 @@ export const getProductBySku = async (sku: string): Promise<Product | null> => {
 
     return parseProduct(product);
   } catch (error) {
-    console.log('Scan error:', error);
     return null;
   }
 };
@@ -138,7 +136,6 @@ export const getRecentProducts = async (): Promise<Product[]> => {
     const products = response.data.products || response.data || [];
     return products.map(parseProduct);
   } catch (error) {
-    console.log('Recent products error:', error);
     return [];
   }
 };
@@ -163,7 +160,6 @@ export const createTransaction = async (
       errors: response.data.errors,
     };
   } catch (error: any) {
-    console.log('Transaction error:', error);
     const errorData = error.response?.data;
 
     return {
@@ -198,7 +194,6 @@ export const getDashboardStats = async (): Promise<DashboardStats | null> => {
 
     return null;
   } catch (error) {
-    console.log('Dashboard stats error:', error);
     return null;
   }
 };
@@ -233,7 +228,6 @@ export const getProductBarcode = async (sku: string): Promise<SingleBarcodeRespo
       data: response.data.data || response.data,
     };
   } catch (error: any) {
-    console.error('Error fetching barcode:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to fetch barcode',
@@ -251,7 +245,6 @@ export const getProductBarcodes = async (skus: string[]): Promise<BulkBarcodeRes
       data: response.data.data || [],
     };
   } catch (error: any) {
-    console.error('Error fetching barcodes:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to fetch barcodes',

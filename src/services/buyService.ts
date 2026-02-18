@@ -46,7 +46,6 @@ export const getBuys = async (params?: BuyListParams): Promise<BuyListResponse> 
       total: response.data.total || 0,
     };
   } catch (error) {
-    console.error('Error fetching buys:', error);
     return {data: [], current_page: 1, last_page: 1, total: 0};
   }
 };
@@ -57,10 +56,8 @@ export const getBuyById = async (id: number): Promise<Buy | null> => {
     const response = await api.get(`/buys/${id}`);
     const rawData = response.data.data || response.data;
     // Debug: log raw payments from API
-    console.log('Raw payments from API:', JSON.stringify(rawData.payments));
     return parseBuy(rawData);
   } catch (error) {
-    console.error('Error fetching buy:', error);
     return null;
   }
 };
@@ -74,7 +71,6 @@ export const createBuy = async (data: CreateBuyPayload): Promise<{success: boole
       data: parseBuy(response.data.data || response.data),
     };
   } catch (error: any) {
-    console.error('Error creating buy:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to create buy',
@@ -94,7 +90,6 @@ export const updateBuy = async (
       data: parseBuy(response.data.data || response.data),
     };
   } catch (error: any) {
-    console.error('Error updating buy:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to update buy',
@@ -108,7 +103,6 @@ export const saveNewCustomerToDraft = async (
   newCustomer: NewCustomerPayload
 ): Promise<{success: boolean; data?: any; message?: string}> => {
   try {
-    console.log('Saving new customer to draft:', JSON.stringify(newCustomer));
     const response = await api.put(`/buys/${buyId}`, {
       new_customer: newCustomer,
     });
@@ -117,7 +111,6 @@ export const saveNewCustomerToDraft = async (
       data: response.data.data,
     };
   } catch (error: any) {
-    console.error('Error saving new customer to draft:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to save customer',
@@ -161,7 +154,6 @@ export const addBuyItem = async (
       data: response.data.data,
     };
   } catch (error: any) {
-    console.error('Error adding item to buy:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to add item',
@@ -182,7 +174,6 @@ export const updateBuyItem = async (
       data: response.data.data,
     };
   } catch (error: any) {
-    console.error('Error updating item:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to update item',
@@ -202,7 +193,6 @@ export const deleteBuyItem = async (
       data: response.data.data,
     };
   } catch (error: any) {
-    console.error('Error deleting item:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to delete item',
@@ -228,7 +218,6 @@ export const updateBuyPayments = async (
       data: response.data.data,
     };
   } catch (error: any) {
-    console.error('Error updating payments:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to update payments',
@@ -250,9 +239,7 @@ export const saveBuyAsPending = async (
       amount: typeof p.amount === 'string' ? parseFloat(p.amount as string) : p.amount,
     }));
 
-    console.log('Saving buy as pending with payments:', JSON.stringify(cleanedPayments));
     if (newCustomer) {
-      console.log('Creating new customer:', JSON.stringify(newCustomer));
     }
 
     const response = await api.post(`/buys/${id}/pending`, {
@@ -265,8 +252,6 @@ export const saveBuyAsPending = async (
       data: response.data.data,
     };
   } catch (error: any) {
-    console.error('Error saving buy as pending:', error);
-    console.error('Error response data:', JSON.stringify(error.response?.data));
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to save as pending',
@@ -290,7 +275,6 @@ export const completeBuy = async (
     }));
 
     if (newCustomer) {
-      console.log('Creating new customer on complete:', JSON.stringify(newCustomer));
     }
 
     const response = await api.post(`/buys/${id}/complete`, {
@@ -304,8 +288,6 @@ export const completeBuy = async (
       data: response.data.data,
     };
   } catch (error: any) {
-    console.error('Error completing buy:', error);
-    console.error('Error response data:', JSON.stringify(error.response?.data));
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to complete buy',
@@ -342,7 +324,6 @@ export const addBuyItemsToInventory = async (
       items: response.data.items,
     };
   } catch (error: any) {
-    console.error('Error adding items to inventory:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to add items to inventory',
@@ -372,7 +353,6 @@ export const removeBuyItemsFromInventory = async (
       deleted: response.data.deleted,
     };
   } catch (error: any) {
-    console.error('Error removing items from inventory:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to remove from inventory',
@@ -394,7 +374,6 @@ export const uploadBuyPhotos = async (
       data: response.data.photos || [],
     };
   } catch (error: any) {
-    console.error('Error uploading photos:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to upload photos',
@@ -408,7 +387,6 @@ export const deleteBuy = async (id: number): Promise<{success: boolean; message?
     await api.delete(`/buys/${id}`);
     return {success: true};
   } catch (error: any) {
-    console.error('Error deleting buy:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to delete buy',
@@ -430,7 +408,6 @@ export const restoreBuy = async (id: number): Promise<{success: boolean; data?: 
       data: parseBuy(response.data.data || response.data),
     };
   } catch (error: any) {
-    console.error('Error restoring buy:', error);
     return {
       success: false,
       message: error.response?.data?.message || 'Failed to restore buy',

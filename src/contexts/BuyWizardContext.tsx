@@ -1,5 +1,5 @@
 import React, {createContext, useContext, useReducer, ReactNode, useCallback} from 'react';
-import {CostEntryMode, ItemCondition} from '@types';
+import {CostEntryMode, ItemCondition, CreateBuyPayload} from '@types';
 import {CustomerSearchResult} from '@services/customerService';
 import {
   createBuy,
@@ -444,7 +444,7 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
     }
   }, [state.buyId]);
 
-  // Save as draft (saves new customer if exists)
+  // Save as draft (saves new customer and createdBy if exists)
   const saveAsDraft = useCallback(async (): Promise<boolean> => {
     if (!state.buyId) return false;
 
@@ -458,28 +458,41 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
       return false;
     }
 
-    // If there's a new customer, save them to the draft
-    if (state.newCustomer) {
-      dispatch({type: 'SET_SAVING', payload: true});
-      try {
-        const newCustomerPayload: NewCustomerPayload = {
+    dispatch({type: 'SET_SAVING', payload: true});
+    try {
+      // Build update payload with createdBy and optionally new customer
+      const updatePayload: Partial<CreateBuyPayload> & {new_customer?: NewCustomerPayload} = {};
+
+      // Always save createdBy if it exists
+      if (state.createdBy) {
+        updatePayload.created_by = state.createdBy;
+      }
+
+      // Add new customer if exists
+      if (state.newCustomer) {
+        updatePayload.new_customer = {
           first_name: state.newCustomer.firstName,
           last_name: state.newCustomer.lastName,
           email: state.newCustomer.email,
           phone: state.newCustomer.phone || undefined,
         };
-        const result = await saveNewCustomerToDraft(state.buyId, newCustomerPayload);
+      }
+
+      // Only make API call if there's something to save
+      if (Object.keys(updatePayload).length > 0) {
+        const result = await updateBuy(state.buyId, updatePayload);
         if (!result.success) {
-          Toast.show({type: 'error', text1: result.message || 'Failed to save customer'});
+          Toast.show({type: 'error', text1: result.message || 'Failed to save draft'});
           return false;
         }
-        dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
-      } catch (error) {
-        Toast.show({type: 'error', text1: 'Failed to save draft'});
-        return false;
-      } finally {
-        dispatch({type: 'SET_SAVING', payload: false});
       }
+
+      dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
+    } catch (error) {
+      Toast.show({type: 'error', text1: 'Failed to save draft'});
+      return false;
+    } finally {
+      dispatch({type: 'SET_SAVING', payload: false});
     }
 
     // Show appropriate message based on current status
@@ -491,7 +504,7 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
     const message = statusMessages[state.status || 'draft'] || 'Changes saved';
     Toast.show({type: 'success', text1: message});
     return true;
-  }, [state.buyId, state.newCustomer, state.payments.length, state.status, totalPayments, totalBuyAmount]);
+  }, [state.buyId, state.newCustomer, state.createdBy, state.payments.length, state.status, totalPayments, totalBuyAmount]);
 
   // Save as pending
   const saveAsPending = useCallback(async (): Promise<boolean> => {
@@ -536,7 +549,7 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
           }
         : undefined;
 
-      const result = await saveBuyAsPending(state.buyId, payments, storeCreditAmount, newCustomerPayload);
+      const result = await saveBuyAsPending(state.buyId, payments, storeCreditAmount, newCustomerPayload, state.createdBy);
       if (result.success) {
         dispatch({type: 'SET_STATUS', payload: 'pending'});
         dispatch({type: 'SET_LAST_SAVED', payload: new Date()});
@@ -551,7 +564,7 @@ export const BuyWizardProvider: React.FC<BuyWizardProviderProps> = ({children}) 
     } finally {
       dispatch({type: 'SET_SAVING', payload: false});
     }
-  }, [state.buyId, state.customer, state.newCustomer, state.payments, totalPayments, totalBuyAmount]);
+  }, [state.buyId, state.customer, state.newCustomer, state.payments, state.createdBy, totalPayments, totalBuyAmount]);
 
   // Complete buy transaction
   const completeBuyTransaction = useCallback(async (): Promise<boolean> => {

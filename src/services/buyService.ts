@@ -230,7 +230,8 @@ export const saveBuyAsPending = async (
   id: number,
   payments?: BuyPaymentPayload[],
   storeCreditAmount?: number,
-  newCustomer?: NewCustomerPayload
+  newCustomer?: NewCustomerPayload,
+  createdBy?: string
 ): Promise<{success: boolean; data?: any; message?: string}> => {
   try {
     // Ensure payment amounts are numbers, not strings
@@ -246,6 +247,7 @@ export const saveBuyAsPending = async (
       payments: cleanedPayments,
       store_credit_amount: storeCreditAmount,
       new_customer: newCustomer,
+      created_by: createdBy,
     });
     return {
       success: true,

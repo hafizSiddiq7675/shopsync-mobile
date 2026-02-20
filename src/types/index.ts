@@ -174,6 +174,7 @@ export interface CreateBuyPayload {
   payments?: CreateBuyPaymentPayload[];
   notes?: string;
   total_buy_amount?: number;
+  created_by?: string;
 }
 
 export interface BuyListResponse {

@@ -126,6 +126,11 @@ const Step1CustomerScreen: React.FC = () => {
       if (buy.notes) {
         dispatch({type: 'SET_NOTES', payload: buy.notes});
       }
+
+      // Set created_by
+      if (buy.created_by) {
+        dispatch({type: 'SET_CREATED_BY', payload: buy.created_by});
+      }
     }
     setIsLoadingBuy(false);
   };

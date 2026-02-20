@@ -17,7 +17,7 @@ import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Icon} from 'react-native-paper';
 import Toast from 'react-native-toast-message';
-import {generatePDF} from 'react-native-html-to-pdf';
+import RNHTMLtoPDF, {generatePDF} from 'react-native-html-to-pdf';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
 import {BuyStackParamList, Buy, BuyItem, ItemCondition} from '@types';
@@ -225,7 +225,9 @@ const BuyDetailsScreen: React.FC = () => {
         directory: Platform.OS === 'android' ? 'Download' : 'Documents',
       };
 
-      const file = await generatePDF(options);
+      const file = Platform.OS === 'android'
+        ? await generatePDF(options)
+        : await RNHTMLtoPDF.convert(options);
 
       if (file.filePath) {
         await sharePdfFile(file.filePath, fileName);
@@ -372,7 +374,9 @@ const BuyDetailsScreen: React.FC = () => {
           directory: Platform.OS === 'android' ? 'Download' : 'Documents',
         };
 
-        const file = await generatePDF(options);
+        const file = Platform.OS === 'android'
+          ? await generatePDF(options)
+          : await RNHTMLtoPDF.convert(options);
 
         if (file.filePath) {
           await sharePdfFile(file.filePath, fileName);
@@ -862,7 +866,7 @@ const BuyDetailsScreen: React.FC = () => {
         message={confirmModalText.message}
         confirmText={confirmModalText.confirmText}
         cancelText="Cancel"
-        icon={confirmAction.includes('remove') ? 'package-variant-minus' : 'package-variant-plus'}
+        icon={confirmAction.includes('remove') ? 'minus-circle-outline' : 'plus-circle-outline'}
         isDestructive={confirmAction.includes('remove')}
       />
 

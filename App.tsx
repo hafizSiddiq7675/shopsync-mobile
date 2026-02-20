@@ -30,7 +30,7 @@ function App() {
             <PaperProvider>
               <NavigationContainer>
                 <CartProvider>
-                  <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+                  <StatusBar barStyle="light-content" backgroundColor="#000000" />
                   <AppNavigator />
                 </CartProvider>
               </NavigationContainer>

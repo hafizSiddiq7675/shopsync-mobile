@@ -10,7 +10,7 @@ import {Platform} from 'react-native';
 const PRODUCTION_API_URL = 'https://app.hobbydex.net/api';
 
 // Development API URLs
-const DEV_API_URL_IOS = 'http://localhost:8000/api';
+const DEV_API_URL_IOS = 'https://app.hobbydex.net/api';
 const DEV_API_URL_ANDROID = 'http://10.0.2.2:8000/api';
 
 // API Timeout (in milliseconds)

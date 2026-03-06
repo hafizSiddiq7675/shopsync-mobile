@@ -270,6 +270,7 @@ const styles = StyleSheet.create({
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
   avatarContainer: {
     width: 42,
@@ -278,6 +279,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.purple,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   userInfo: {
     marginLeft: SPACING.md,

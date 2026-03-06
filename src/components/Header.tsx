@@ -100,6 +100,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    overflow: 'visible',
   },
   backButton: {
     width: 44,
@@ -118,6 +119,8 @@ const styles = StyleSheet.create({
   },
   leftSection: {
     flex: 1,
+    marginRight: SPACING.sm,
+    overflow: 'hidden',
   },
   placeholder: {
     width: 44,

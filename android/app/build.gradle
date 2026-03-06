@@ -114,13 +114,11 @@ android {
         }
     }
 
-    // Split APKs by ABI for release builds only (debug needs x86 for emulator)
+    // ABI splits disabled - AAB (app bundle) handles multiple architectures automatically
     splits {
         abi {
             reset()
-            enable gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
-            universalApk false  // Don't generate universal APK
-            include "armeabi-v7a", "arm64-v8a"  // Most common architectures for real devices
+            enable false
         }
     }
 }

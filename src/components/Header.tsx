@@ -45,7 +45,7 @@ const Header: React.FC<HeaderProps> = ({
       style={styles.header}>
       {/* Left Section */}
       {leftComponent ? (
-        leftComponent
+        <View style={styles.leftSection}>{leftComponent}</View>
       ) : showBackButton ? (
         <TouchableOpacity style={styles.backButton} onPress={onBackPress}>
           <Icon source="arrow-left" size={24} color={COLORS.purple} />
@@ -55,7 +55,7 @@ const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Title */}
-      {title && <Text style={styles.title}>{title}</Text>}
+      {title && <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">{title}</Text>}
 
       {/* Right Actions */}
       {rightComponent ? (
@@ -66,7 +66,7 @@ const Header: React.FC<HeaderProps> = ({
             <TouchableOpacity
               style={[styles.iconButton, styles.iconButtonOrange]}
               onPress={onNotificationPress}>
-              <Icon source="bell-outline" size={24} color={COLORS.orange} />
+              <Icon source="bell-outline" size={20} color={COLORS.orange} />
             </TouchableOpacity>
           )}
           {showLogout && (
@@ -77,7 +77,7 @@ const Header: React.FC<HeaderProps> = ({
               {isLoggingOut ? (
                 <ActivityIndicator size="small" color={COLORS.pink} />
               ) : (
-                <Icon source="power" size={24} color={COLORS.pink} />
+                <Icon source="power" size={20} color={COLORS.pink} />
               )}
             </TouchableOpacity>
           )}
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     marginBottom: SPACING.md,
     shadowColor: '#000000',
     shadowOffset: {width: 0, height: 4},
@@ -116,6 +116,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
+  leftSection: {
+    flex: 1,
+  },
   placeholder: {
     width: 44,
   },
@@ -129,10 +132,11 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     gap: SPACING.sm,
+    flexShrink: 0,
   },
   iconButton: {
-    width: 44,
-    height: 44,
+    width: 38,
+    height: 38,
     borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',

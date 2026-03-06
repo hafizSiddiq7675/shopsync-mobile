@@ -140,7 +140,7 @@ const HomeScreen: React.FC = () => {
               {isLoading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Icon source="account" size={32} color="#FFFFFF" />
+                <Icon source="account" size={26} color="#FFFFFF" />
               )}
             </View>
             <View style={styles.userInfo}>
@@ -151,8 +151,8 @@ const HomeScreen: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <Text style={styles.userName}>{user?.name || 'User'}</Text>
-                  <Text style={styles.shopName}>{shop?.name || 'Shop'}</Text>
+                  <Text style={styles.userName} numberOfLines={1}>{user?.name || 'User'}</Text>
+                  <Text style={styles.shopName} numberOfLines={1}>{shop?.name || 'Shop'}</Text>
                 </>
               )}
             </View>
@@ -272,23 +272,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: COLORS.purple,
     alignItems: 'center',
     justifyContent: 'center',
   },
   userInfo: {
     marginLeft: SPACING.md,
+    flexShrink: 1,
   },
   userName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
   },
   shopName: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#8B8BA7',
     marginTop: 2,
   },

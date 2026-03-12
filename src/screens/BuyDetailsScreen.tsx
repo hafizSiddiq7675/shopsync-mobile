@@ -434,7 +434,7 @@ const BuyDetailsScreen: React.FC = () => {
         <body>
           ${products.map(product => `
             <div class="barcode-page">
-              <div class="shop-name">ShopSync</div>
+              <div class="shop-name">Hobbydex</div>
               <img class="barcode-img" src="${ensureDataUri(product.barcode)}" />
               <div class="product-name">${product.name}</div>
               <div class="sku">${product.sku}</div>

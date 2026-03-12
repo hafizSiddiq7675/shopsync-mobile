@@ -77,7 +77,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                 <Icon source="cart" size={40} color="#FFFFFF" />
               </View>
               <Text style={styles.subtitle}>Welcome Back To</Text>
-              <Text style={styles.title}>ShopSync</Text>
+              <Text style={styles.title}>Hobbydex</Text>
               <Text style={styles.description}>
                 Sign in to manage your shop
               </Text>
